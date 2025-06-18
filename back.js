@@ -26,7 +26,8 @@ const userSchema = new mongoose.Schema({
     birthDate: Date,
     countryOrigin: String,
     gender: String,
-    profileImageUrl: String
+    profileImageUrl: String,
+    email: String,
 })
 
 const User = mongoose.model('Users', userSchema);
@@ -37,7 +38,7 @@ app.post('/api/users', async (req, res) => {
     const {command, data} = req.body;
 
     try {
-        const newUser = new User({fullName: data.fullName, birthDate: data.birthDate, countryOrigin: data.countryOrigin, gender: data.gender, profileImageUrl: data.profileImageUrl});
+        const newUser = new User({fullName: data.fullName, birthDate: data.birthDate, countryOrigin: data.countryOrigin, gender: data.gender, profileImageUrl: data.profileImageUrl, email: data.email});
         await newUser.save();
         return res.json({message: 'Successfully inserted user', user: newUser});
     } catch (error) {
@@ -46,7 +47,18 @@ app.post('/api/users', async (req, res) => {
     }
 })
 
-
+app.get('/api/users/:email', async (req, res) => {
+    try {
+        const user = await User.findOne({ email: req.params.email });
+        if (!user) {
+            return res.status(404).json({ message: 'User not found' });
+        }
+        return res.json(user);
+    } catch (error) {
+        console.log(error);
+        return res.status(500).json({ message: 'Server error' });
+    }
+});
 
 
 const PORT = 5000;
