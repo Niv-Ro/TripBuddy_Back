@@ -25,7 +25,8 @@ const userSchema = new mongoose.Schema({
     fullName: String,
     birthDate: Date,
     countryOrigin: String,
-    gender: String
+    gender: String,
+    profileImageUrl: String
 })
 
 const User = mongoose.model('Users', userSchema);
@@ -36,7 +37,7 @@ app.post('/api/users', async (req, res) => {
     const {command, data} = req.body;
 
     try {
-        const newUser = new User({fullName: data.fullName, birthDate: data.birthDate, countryOrigin: data.countryOrigin, gender: data.gender});
+        const newUser = new User({fullName: data.fullName, birthDate: data.birthDate, countryOrigin: data.countryOrigin, gender: data.gender, profileImageUrl: data.profileImageUrl});
         await newUser.save();
         return res.json({message: 'Successfully inserted user', user: newUser});
     } catch (error) {
