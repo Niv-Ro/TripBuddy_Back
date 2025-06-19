@@ -2,6 +2,10 @@ const express = require('express');
 const router = express.Router();
 const postController = require('../controllers/postController');
 
+router.post('/', postController.createPost);
+router.get('/feed/:userId', postController.getFeedPosts);
+router.get('/group/:groupId', postController.getGroupPosts);
+
 // GET /api/posts/ -> קבל את כל הפוסטים (עבור הפיד)
 router.get('/', postController.getAllPosts);
 
@@ -22,6 +26,8 @@ router.delete('/:postId', postController.deletePost);
 router.put('/:postId', postController.updatePost);
 
 router.get('/feed/:userId', postController.getFeedPosts);
+
+router.get('/group/:groupId', postController.getGroupPosts);
 
 
 module.exports = router;
