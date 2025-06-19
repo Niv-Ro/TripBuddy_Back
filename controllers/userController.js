@@ -56,6 +56,19 @@ exports.getUserByEmail = async (req, res) => {
     }
 };
 
+exports.getUserById = async (req, res) => {
+    try {
+        const user = await User.findById(req.params.userId);
+        if (!user) {
+            return res.status(404).json({ message: 'User not found by ID' });
+        }
+        res.json(user);
+    } catch (error) {
+        console.error("Error fetching user by ID:", error);
+        res.status(500).json({ message: 'Server error' });
+    }
+};
+
 // === Update a user's country lists ===
 exports.updateUserCountryLists = async (req, res) => {
     try {
