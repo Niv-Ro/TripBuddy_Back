@@ -1,8 +1,7 @@
     const Post = require('../models/Post');
     const User = require('../models/User');
     const Comment = require('../models/Comment');
-    const mongoose = require('mongoose');
-    const { getStorage } = require('firebase-admin/storage'); // ייבוא שירותי ה-Storage
+    const { storage } = require('../config/firebaseAdmin');
     // --- Create a new post ---
     exports.createPost = async (req, res) => {
         console.log("SERVER: Attempting to create a new post...");
@@ -79,29 +78,35 @@
 
     exports.deletePost = async (req, res) => {
         try {
-            const post = await Post.findById(req.params.postId);
-            if (!post) return res.status(404).json({ message: 'Post not found' });
-
-            // כאן תוודא שהמשתמש הוא הבעלים של הפוסט
-            // ...
-
-            // מחיקת הקבצים מה-Storage
-            if (post.media && post.media.length > 0) {
-                const bucket = getStorage().bucket();
-                const deletePromises = post.media.map(file => {
-                    // מוחקים באמצעות הנתיב ששמרנו
-                    return bucket.file(file.path).delete();
-                });
-                await Promise.all(deletePromises);
-                console.log("SERVER: Successfully deleted files from Firebase Storage.");
+            const postId = req.params.postId;
+            const post = await Post.findById(postId);
+            if (!post) {
+                return res.status(404).json({ message: 'Post not found' });
             }
 
-            // מחיקת הפוסט מה-DB
-            await Post.findByIdAndDelete(req.params.postId);
-            res.json({ message: 'Post and associated files deleted successfully' });
+            // 1. Delete associated files from Firebase Storage
+            if (post.media && post.media.length > 0) {
+                // 🔥 FIX: Use the imported storage object directly
+                const bucket = storage.bucket();
+                const deletePromises = post.media
+                    .filter(file => file && file.path)
+                    .map(file => bucket.file(file.path).delete());
+
+                await Promise.all(deletePromises);
+                console.log(`SERVER: Successfully deleted files from Storage.`);
+            }
+
+            // 2. Delete all comments associated with this post
+            await Comment.deleteMany({ post: postId });
+
+            // 3. Finally, delete the post document itself
+            await Post.findByIdAndDelete(postId);
+
+            res.json({ message: 'Post and all associated data deleted successfully' });
+
         } catch (error) {
             console.error("SERVER ERROR in deletePost:", error);
-            res.status(500).json({ message: 'Server error' });
+            res.status(500).json({ message: 'Server error', error: error.message });
         }
     };
 

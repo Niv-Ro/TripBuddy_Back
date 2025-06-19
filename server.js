@@ -51,6 +51,7 @@ const mongoose = require('mongoose');
 const cors = require('cors');
 const bodyParser = require('body-parser');
 require('dotenv').config();
+require('./config/firebaseAdmin');
 
 // ייבוא קבצי ה-Routes
 const userRoutes = require('./routes/users');
