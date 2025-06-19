@@ -114,17 +114,30 @@ exports.searchGroups = async (req, res) => {
 // שליחת בקשת הצטרפות לקבוצה
 exports.requestToJoin = async (req, res) => {
     const { userId } = req.body;
+    const { groupId } = req.params;
+
     try {
-        const group = await Group.findById(req.params.groupId);
-        // בדוק אם המשתמש כבר חבר או שיש לו בקשה ממתינה
-        if (group.members.some(m => m.user.equals(userId))) {
+        const group = await Group.findById(groupId);
+
+        if (!group) {
+            return res.status(404).json({ message: 'Group not found.' });
+        }
+
+        // 🔥 התיקון כאן: בדיקה בטוחה יותר שמונעת קריסה
+        // נוודא ש-m.user קיים לפני שננסה להשוות אותו
+        const isAlreadyMember = group.members.some(m => m.user && m.user.equals(userId));
+
+        if (isAlreadyMember) {
             return res.status(400).json({ message: 'You are already a member or have a pending request.' });
         }
-        // הוסף את המשתמש עם סטטוס חדש המציין בקשה לאישור
+
         group.members.push({ user: userId, status: 'pending_approval' });
         await group.save();
+
         res.status(200).json({ message: 'Request sent successfully.' });
     } catch (err) {
+        // הדפסת השגיאה ללוגים תעזור לנו לאתר בעיות בעתיד
+        console.error("CRASH in requestToJoin:", err);
         res.status(500).send('Server Error');
     }
 };

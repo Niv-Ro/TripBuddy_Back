@@ -7,7 +7,7 @@ const GroupSchema = new mongoose.Schema({
     admin: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
     members: [{
         user: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
-        status: { type: String, enum: ['pending', 'approved'], default: 'pending' }
+        status: { type: String, enum: ['pending', 'approved', 'pending_approval'], default: 'pending' }
     }],
     isPrivate: { type: Boolean, default: true }
 }, { timestamps: true });
