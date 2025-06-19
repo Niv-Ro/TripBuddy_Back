@@ -1,52 +1,94 @@
-
 const express = require('express');
 const mongoose = require('mongoose');
 const cors = require('cors');
 const bodyParser = require('body-parser');
 require('dotenv').config();
 require('./config/firebaseAdmin');
-
+const http = require('http');
+const { Server } = require('socket.io');
 // ייבוא קבצי ה-Routes
 const userRoutes = require('./routes/users');
 const postRoutes = require('./routes/posts');
 const groupRoutes = require('./routes/groups');
+const chatRoutes = require('./routes/chatRoutes');
+const messageRoutes = require('./routes/messageRoutes');
+
 
 const app = express();
-
-app.use(cors({
-    origin: ['http://localhost:3000',
-        'http://localhost:3001',
-        'http://127.0.0.1:3000',
-        'http://localhost:5000'],
-    credentials: true
-}));
-
-// 2. Body Parser - מפענח את גוף הבקשה ל-JSON
+const server = http.createServer(app);
+const io = new Server(server, { // 4. אתחול socket.io על שרת ה-http
+    cors: {
+        origin: "http://localhost:3000", // החלף בכתובת ה-frontend שלך
+        methods: ["GET", "POST"]
+    }
+});
+// הגדרת CORS פתוחה (פתר את הבעיה הקודמת)
+app.use(cors());
+// app.use(cors({
+//     origin: ['http://localhost:3000',
+//         'http://localhost:3001',
+//         'http://127.0.0.1:3000',
+//         'http://localhost:5000'],
+//     credentials: true
+// }));
 app.use(bodyParser.json());
 
 // --- Routes Section ---
-// רק אחרי שהבקשה עברה את המידלוור, נשלח אותה ל-Router המתאים
 app.use('/api/users', userRoutes);
 app.use('/api/posts', postRoutes);
 app.use('/api/groups', groupRoutes);
+app.use('/api/chats', chatRoutes);
+app.use('/api/messages', messageRoutes);
 
+// --- לוגיקת Socket.io ---
+io.on('connection', (socket) => {
+    console.log('User connected to Socket.io:', socket.id);
 
+    // כשהמשתמש מתחבר, הוא נכנס ל"חדר" אישי על שם ה-ID שלו
+    socket.on('setup', (userId) => {
+        socket.join(userId);
+        socket.emit('connected');
+    });
+
+    // כשהמשתמש פותח צ'אט, הוא מצטרף לחדר של הצ'אט
+    socket.on('join chat', (room) => {
+        socket.join(room);
+        console.log(`User ${socket.id} joined room: ${room}`);
+    });
+
+    // כשנשלחת הודעה חדשה
+    socket.on('new message', (newMessageReceived) => {
+        const chat = newMessageReceived.chat;
+        if (!chat.members) return console.log("Chat members not defined");
+
+        // שלח את ההודעה לכל המשתמשים בחדר, חוץ מהשולח
+        chat.members.forEach(member => {
+            if (member.user._id == newMessageReceived.sender._id) return;
+            // 'message received' הוא שם האירוע שה-frontend יאזין לו
+            socket.in(member.user._id).emit('message received', newMessageReceived);
+        });
+    });
+
+    socket.on('disconnect', () => {
+        console.log('User disconnected:', socket.id);
+    });
+});
 
 // --- Database Connection ---
 const MONGO_URI = process.env.MONGO_URI;
-mongoose.connect(MONGO_URI, {
-    useNewUrlParser: true,
-    useUnifiedTopology: true
-}).then(() => {
-    console.log('Successfully connected to MongoDB');
-}).catch(err => {
-    console.error('Connection error', err);
-    process.exit();
-});
+mongoose.connect(MONGO_URI)
+    .then(() => console.log('Successfully connected to MongoDB'))
+    .catch(err => {
+        console.error('Connection error', err);
+        process.exit();
+    });
 
 // --- Server Start ---
 const HOST = 'localhost';
 const PORT = process.env.PORT || 5000;
-app.listen(PORT, HOST,() => {
+app.listen(PORT, HOST, () => {
     console.log(`Server listening on http://${HOST}:${PORT}`);
 });
+
+
+
