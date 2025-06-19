@@ -8,7 +8,10 @@ const app = express();
 
 // Middleware
 app.use(cors({
-    origin: ['http://localhost:3000', 'http://localhost:3001'],
+    origin: ['http://localhost:3000',
+        'http://localhost:3001',
+        'http://127.0.0.1:3000',
+        'http://localhost:5000'],
     credentials: true
 }));
 app.use(bodyParser.json());
@@ -32,7 +35,8 @@ app.use('/api/users', userRoutes); // הגדרה: כל נתיב שמתחיל ב-
 
 
 // Server Start
+const HOST = 'localhost';
 const PORT = process.env.PORT || 5000;
-app.listen(PORT, () => {
-    console.log(`Server listening on port ${PORT}`);
+app.listen(PORT, HOST,() => {
+    console.log(`Server listening on http://${HOST}:${PORT}`);
 });
