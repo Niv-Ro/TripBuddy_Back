@@ -103,3 +103,68 @@ exports.updateUserCountryLists = async (req, res) => {
         res.status(500).json({ message: 'Server error' });
     }
 };
+
+exports.toggleFollow = async (req, res) => {
+    // ID של המשתמש שאחריו רוצים לעקוב (מה-URL)
+    const { userIdToFollow } = req.params;
+
+    // ✅ שינוי: קבלת ה-ID של המשתמש המחובר מגוף הבקשה במקום מה-middleware
+    const { loggedInUserId } = req.body;
+
+    // בדיקה בסיסית שה-ID נשלח
+    if (!loggedInUserId) {
+        return res.status(400).json({ message: "loggedInUserId is required in the request body." });
+    }
+
+    if (userIdToFollow === loggedInUserId) {
+        return res.status(400).json({ message: "You cannot follow yourself." });
+    }
+
+    try {
+        const loggedInUser = await User.findById(loggedInUserId);
+        const userToFollow = await User.findById(userIdToFollow);
+
+        if (!userToFollow || !loggedInUser) {
+            return res.status(404).json({ message: "User not found." });
+        }
+
+        const isFollowing = loggedInUser.following.includes(userIdToFollow);
+
+        if (isFollowing) {
+            await User.findByIdAndUpdate(loggedInUserId, { $pull: { following: userIdToFollow } });
+            await User.findByIdAndUpdate(userIdToFollow, { $pull: { followers: loggedInUserId } });
+            res.json({ message: 'Successfully unfollowed user.' });
+        } else {
+            await User.findByIdAndUpdate(loggedInUserId, { $addToSet: { following: userIdToFollow } });
+            await User.findByIdAndUpdate(userIdToFollow, { $addToSet: { followers: loggedInUserId } });
+            res.json({ message: 'Successfully followed user.' });
+        }
+
+    } catch (error) {
+        console.error('Error in toggleFollow:', error);
+        res.status(500).json({ message: 'Server error' });
+    }
+};
+exports.searchUsers = async (req, res) => {
+    // קבל את מחרוזת החיפוש מה-query string (למשל, /search?q=david)
+    const searchQuery = req.query.q;
+
+    if (!searchQuery) {
+        return res.json([]); // אם החיפוש ריק, החזר מערך ריק
+    }
+
+    try {
+        // בצע חיפוש בשדה fullName. ה-options: 'i' גורם לחיפוש להיות case-insensitive
+        const users = await User.find({
+            fullName: { $regex: searchQuery, $options: 'i' }
+        })
+            .limit(10) // הגבל את מספר התוצאות כדי למנוע עומס
+            .select('fullName profileImageUrl'); // החזר רק את השדות הנחוצים לתצוגה
+
+        res.json(users);
+
+    } catch (error) {
+        console.error('Error searching for users:', error);
+        res.status(500).json({ message: 'Server error' });
+    }
+};

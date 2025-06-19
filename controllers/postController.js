@@ -227,3 +227,40 @@
             res.status(500).json({ message: 'Server error', error: error.message });
         }
     };
+    exports.getFeedPosts = async (req, res) => {
+        try {
+            const { userId } = req.params;
+
+            // 1. מצא את המשתמש וקבל את רשימות העוקבים וה-wishlist שלו
+            const user = await User.findById(userId);
+
+            if (!user) {
+                return res.status(404).json({ message: 'User for feed not found.' });
+            }
+
+            // 2. הכן את המערכים עבור השאילתה
+            const authorsForFeed = [user._id, ...user.following];
+            const wishlistCountries = user.wishlistCountries || []; // ודא שהמערך קיים
+
+            // 3. בנה והפעל את השאילתה המורכבת עם $or
+            const posts = await Post.find({
+                $or: [
+                    // תנאי א': פוסטים של חברים
+                    { author: { $in: authorsForFeed } },
+
+                    // תנאי ב': פוסטים שתויגו עם מדינה מה-wishlist
+                    // ודא שה-wishlist אינו ריק כדי לבצע את החלק הזה של השאילתה
+                    { taggedCountries: { $in: wishlistCountries } }
+                ]
+            })
+                .sort({ createdAt: -1 })
+                .populate('author', 'fullName profileImageUrl')
+                .populate({ path: 'comments', populate: { path: 'author', select: 'fullName profileImageUrl' }});
+
+            res.json(posts);
+
+        } catch (error) {
+            console.error('Error fetching smart feed posts:', error);
+            res.status(500).json({ message: 'Server Error' });
+        }
+    };

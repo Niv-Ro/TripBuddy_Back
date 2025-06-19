@@ -24,7 +24,15 @@ const UserSchema = new mongoose.Schema({
     wishlistCountriesCcn3: {
         type: [String], // Array of 3-digit numeric codes (ccn3)
         default: []
-    }
+    },
+    following: [{
+        type: mongoose.Schema.Types.ObjectId,
+        ref: 'User'
+    }],
+    followers: [{
+        type: mongoose.Schema.Types.ObjectId,
+        ref: 'User'
+    }]
 });
 
 module.exports = mongoose.model('User', UserSchema);
