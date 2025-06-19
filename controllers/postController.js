@@ -2,7 +2,7 @@
     const User = require('../models/User');
     const Comment = require('../models/Comment');
     const mongoose = require('mongoose');
-
+    const { getStorage } = require('firebase-admin/storage'); // ייבוא שירותי ה-Storage
     // --- Create a new post ---
     exports.createPost = async (req, res) => {
         console.log("SERVER: Attempting to create a new post...");
@@ -42,8 +42,15 @@
     exports.getAllPosts = async (req, res) => {
         try {
             const posts = await Post.find()
-                // populate 'author' with specific fields
                 .populate('author', 'fullName profileImageUrl firebaseUid')
+                // 🔥 Populating comments AND the author of each comment
+                .populate({
+                    path: 'comments',
+                    populate: {
+                        path: 'author',
+                        select: 'fullName profileImageUrl'
+                    }
+                })
                 .sort({ createdAt: -1 });
             res.json(posts);
         } catch (error) {
@@ -56,6 +63,13 @@
         try {
             const posts = await Post.find({ author: req.params.userId })
                 .populate('author', 'fullName profileImageUrl firebaseUid')
+                .populate({
+                    path: 'comments',
+                    populate: {
+                        path: 'author',
+                        select: 'fullName profileImageUrl'
+                    }
+                })
                 .sort({ createdAt: -1 });
             res.json(posts);
         } catch (error) {
@@ -68,15 +82,72 @@
             const post = await Post.findById(req.params.postId);
             if (!post) return res.status(404).json({ message: 'Post not found' });
 
-            // כאן צריך להוסיף בדיקה שהמשתמש שמחק הוא הבעלים של הפוסט
-            // למשל, req.user.uid שהגיע מטוקן מאומת מול post.author.firebaseUid
+            // כאן תוודא שהמשתמש הוא הבעלים של הפוסט
+            // ...
 
+            // מחיקת הקבצים מה-Storage
+            if (post.media && post.media.length > 0) {
+                const bucket = getStorage().bucket();
+                const deletePromises = post.media.map(file => {
+                    // מוחקים באמצעות הנתיב ששמרנו
+                    return bucket.file(file.path).delete();
+                });
+                await Promise.all(deletePromises);
+                console.log("SERVER: Successfully deleted files from Firebase Storage.");
+            }
+
+            // מחיקת הפוסט מה-DB
             await Post.findByIdAndDelete(req.params.postId);
-            res.json({ message: 'Post deleted successfully' });
+            res.json({ message: 'Post and associated files deleted successfully' });
         } catch (error) {
+            console.error("SERVER ERROR in deletePost:", error);
             res.status(500).json({ message: 'Server error' });
         }
     };
+
+
+    exports.updatePost = async (req, res) => {
+        const postId = req.params.postId;
+        const { text } = req.body;
+
+        console.log(`SERVER: Attempting to update post with ID: ${postId}`);
+
+        // בדיקה בסיסית של הקלט
+        if (typeof text !== 'string') {
+            return res.status(400).json({ message: 'Post text must be a string.' });
+        }
+
+        try {
+            // מצא את הפוסט
+            const post = await Post.findById(postId);
+
+            // 🔥 FIX: הבדיקה החשובה שהייתה חסרה
+            // אם הפוסט לא נמצא, החזר שגיאת 404 ברורה
+            if (!post) {
+                console.error(`SERVER ERROR: Post with ID ${postId} not found for update.`);
+                return res.status(404).json({ message: 'Post not found' });
+            }
+
+            // כאן תוסיף בעתיד בדיקה שהמשתמש הוא הבעלים של הפוסט
+            // if (post.author.toString() !== req.user.id) { ... }
+
+            // עדכן את הטקסט ושמור
+            post.text = text;
+            await post.save();
+
+            // החזר את הפוסט המלא והמעודכן, בדיוק כמו בפונקציות האחרות
+            const populatedPost = await Post.findById(post._id)
+                .populate('author', 'fullName profileImageUrl firebaseUid');
+
+            console.log("SERVER: Post updated successfully.");
+            res.json(populatedPost);
+
+        } catch (error) {
+            console.error("SERVER CRASH in updatePost:", error);
+            res.status(500).json({ message: 'Server error', error: error.message });
+        }
+    };
+
 
     // --- Like/Unlike a post ---
     exports.toggleLike = async (req, res) => {
@@ -110,6 +181,44 @@
     // --- Add a comment to a post ---
     exports.addComment = async (req, res) => {
         console.log(`SERVER: Attempting to add comment to post ${req.params.postId}`);
-        // ... לוגיקה עתידית ...
-        res.status(501).json({ message: 'Not implemented yet' });
+
+        try {
+            const { authorId, text } = req.body; // authorId הוא ה-ID מ-MongoDB
+            const postId = req.params.postId;
+
+            // ולידציה בסיסית
+            if (!authorId || !text || !postId) {
+                return res.status(400).json({ message: 'Missing required fields (authorId, text, postId).' });
+            }
+
+            // ודא שהפוסט קיים
+            const post = await Post.findById(postId);
+            if (!post) {
+                return res.status(404).json({ message: 'Post not found' });
+            }
+
+            // 2. צור את מסמך התגובה החדש
+            const newComment = new Comment({
+                author: authorId,
+                post: postId,
+                text: text
+            });
+
+            // 3. שמור את התגובה החדשה
+            await newComment.save();
+
+            // 4. הוסף את ה-ID של התגובה למערך התגובות של הפוסט
+            post.comments.push(newComment._id);
+            await post.save();
+
+            // 5. החזר את התגובה החדשה ללקוח, כולל פרטי המשתמש שכתב אותה
+            const populatedComment = await Comment.findById(newComment._id).populate('author', 'fullName profileImageUrl');
+
+            console.log("SERVER: Comment added successfully.");
+            res.status(201).json(populatedComment);
+
+        } catch (error) {
+            console.error("SERVER CRASH in addComment:", error);
+            res.status(500).json({ message: 'Server error', error: error.message });
+        }
     };

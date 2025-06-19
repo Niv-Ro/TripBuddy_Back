@@ -14,6 +14,7 @@ const PostSchema = new Schema({
     media: [{
         url: { type: String, required: true },
         type: { type: String, required: true }, // 'image/jpeg', 'video/mp4', etc.
+        path: { type: String }
         // validate: [arr => arr.length <= 10, 'Cannot upload more than 10 files.']
     }],
 
