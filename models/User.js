@@ -1,7 +1,6 @@
 const mongoose = require('mongoose');
 
 const UserSchema = new mongoose.Schema({
-    // _id: { type: String, required: true }, // Mongoose adds an _id automatically. If you want to use Firebase UID, it's better to add it as a separate field.
     firebaseUid: { type: String, required: true, unique: true },
     fullName: String,
     email: { type: String, required: true, unique: true },
@@ -14,7 +13,16 @@ const UserSchema = new mongoose.Schema({
         default: []
     },
     wishlistCountries: {
-        type: [String],
+        type: [String], // Array of 3-letter country codes (cca3)
+        default: []
+    },
+    // Added fields for map coloring
+    visitedCountriesCcn3: {
+        type: [String], // Array of 3-digit numeric codes (ccn3)
+        default: []
+    },
+    wishlistCountriesCcn3: {
+        type: [String], // Array of 3-digit numeric codes (ccn3)
         default: []
     }
 });

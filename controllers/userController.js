@@ -58,12 +58,13 @@ exports.getUserByEmail = async (req, res) => {
 
 // === Update a user's country lists ===
 exports.updateUserCountryLists = async (req, res) => {
-    // ... הקוד הקיים שלך נשאר זהה וטוב ...
     try {
-        const { visited, wishlist } = req.body;
+        // Destructure all lists from the request body
+        const { visited, wishlist, visitedCcn3, wishlistCcn3 } = req.body;
         const userEmail = req.params.email;
 
-        if (!Array.isArray(visited) || !Array.isArray(wishlist)) {
+        // Basic validation
+        if (!Array.isArray(visited) || !Array.isArray(wishlist) || !Array.isArray(visitedCcn3) || !Array.isArray(wishlistCcn3)) {
             return res.status(400).json({ message: 'Invalid data format.' });
         }
 
@@ -72,7 +73,9 @@ exports.updateUserCountryLists = async (req, res) => {
             {
                 $set: {
                     visitedCountries: visited,
-                    wishlistCountries: wishlist
+                    wishlistCountries: wishlist,
+                    visitedCountriesCcn3: visitedCcn3,     // Update ccn3 list
+                    wishlistCountriesCcn3: wishlistCcn3    // Update ccn3 list
                 }
             },
             { new: true }
