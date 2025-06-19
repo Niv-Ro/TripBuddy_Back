@@ -1,4 +1,5 @@
 const Group = require('../models/Group');
+const Post = require('../models/Post');
 
 // יצירת קבוצה חדשה
 exports.createGroup = async (req, res) => {
@@ -39,10 +40,15 @@ exports.getMyGroupsAndInvites = async (req, res) => {
 // קבלת פרטים על קבוצה ספציפית
 exports.getGroupDetails = async (req, res) => {
     try {
-        const group = await Group.findById(req.params.groupId).populate('admin', 'fullName').populate('members.user', 'fullName profileImageUrl');
+        const group = await Group.findById(req.params.groupId)
+            .populate('admin', 'fullName')
+            // עדכון: שלוף את כל השדות של המשתמש כדי להציג פרטים מלאים
+            .populate('members.user', 'fullName email profileImageUrl');
         if (!group) return res.status(404).json({ message: 'Group not found.' });
         res.json(group);
-    } catch (err) { res.status(500).send('Server Error'); }
+    } catch (err) {
+        res.status(500).send('Server Error');
+    }
 };
 
 // הזמנת משתמש לקבוצה (פעולת מנהל)
@@ -87,4 +93,63 @@ exports.removeMember = async (req, res) => {
         await group.save();
         res.json(group.members);
     } catch (err) { res.status(500).send('Server Error'); }
+};
+
+// חיפוש קבוצות
+exports.searchGroups = async (req, res) => {
+    try {
+        const { q } = req.query;
+        if (!q) {
+            return res.json([]);
+        }
+        const groups = await Group.find({
+            name: { $regex: q, $options: 'i' } // חיפוש Case-insensitive
+        }).select('name description members'); // שלוף רק שדות נחוצים
+        res.json(groups);
+    } catch (err) {
+        res.status(500).send('Server Error');
+    }
+};
+
+// שליחת בקשת הצטרפות לקבוצה
+exports.requestToJoin = async (req, res) => {
+    const { userId } = req.body;
+    try {
+        const group = await Group.findById(req.params.groupId);
+        // בדוק אם המשתמש כבר חבר או שיש לו בקשה ממתינה
+        if (group.members.some(m => m.user.equals(userId))) {
+            return res.status(400).json({ message: 'You are already a member or have a pending request.' });
+        }
+        // הוסף את המשתמש עם סטטוס חדש המציין בקשה לאישור
+        group.members.push({ user: userId, status: 'pending_approval' });
+        await group.save();
+        res.status(200).json({ message: 'Request sent successfully.' });
+    } catch (err) {
+        res.status(500).send('Server Error');
+    }
+};
+
+// מענה של מנהל לבקשת הצטרפות
+exports.respondToJoinRequest = async (req, res) => {
+    const { adminId, requesterId, response } = req.body; // response: 'approve' or 'decline'
+    try {
+        const group = await Group.findById(req.params.groupId);
+        if (!group.admin.equals(adminId)) {
+            return res.status(403).json({ message: 'Only the admin can respond to requests.' });
+        }
+        const memberIndex = group.members.findIndex(m => m.user.equals(requesterId) && m.status === 'pending_approval');
+        if (memberIndex === -1) {
+            return res.status(404).json({ message: 'Request not found.' });
+        }
+
+        if (response === 'approve') {
+            group.members[memberIndex].status = 'approved';
+        } else { // 'decline'
+            group.members.splice(memberIndex, 1); // הסר את הבקשה
+        }
+        await group.save();
+        res.json({ message: `Request ${response}d.` });
+    } catch (err) {
+        res.status(500).send('Server Error');
+    }
 };

@@ -4,9 +4,7 @@ const Comment = require('../models/Comment');
 const { storage } = require('../config/firebaseAdmin');
 const Group = require('../models/Group');
 
-
-// A helper function to ensure all returned posts are fully populated
-// זה ימנע כפילות קוד ויבטיח שכל הפוסטים תמיד יחזרו באותו פורמט
+// פונקציית עזר למניעת כפילות קוד ולהבטחת פורמט אחיד לפוסטים
 const populatePost = (query) => {
     return query
         .populate('author', 'fullName profileImageUrl firebaseUid')
@@ -19,12 +17,17 @@ const populatePost = (query) => {
         });
 };
 
-
-// --- Create a new post ---
+// --- יצירת פוסט חדש ---
 exports.createPost = async (req, res) => {
     const { authorId, text, media, taggedCountries, groupId } = req.body;
     try {
-        const newPost = new Post({ author: authorId, text, media, taggedCountries, group: groupId || null });
+        const newPost = new Post({
+            author: authorId,
+            text,
+            media,
+            taggedCountries,
+            group: groupId || null // שומר null אם אין קבוצה
+        });
         await newPost.save();
         const populatedPost = await populatePost(Post.findById(newPost._id));
         res.status(201).json(populatedPost);
@@ -34,22 +37,55 @@ exports.createPost = async (req, res) => {
     }
 };
 
-// --- Get all posts for the main feed (Legacy, if needed) ---
-exports.getAllPosts = async (req, res) => {
+// --- 🔥 קבלת פוסטים לפיד הראשי (לוגיקה מתוקנת ומאובטחת) ---
+exports.getFeedPosts = async (req, res) => {
     try {
-        const postsQuery = Post.find().sort({ createdAt: -1 });
+        const { userId } = req.params;
+        const user = await User.findById(userId);
+        if (!user) {
+            return res.status(404).json({ message: 'User not found.' });
+        }
+
+        const userGroups = await Group.find({ 'members.user': userId, 'members.status': 'approved' });
+        const groupIds = userGroups.map(group => group._id);
+
+        const authorsForFeed = [user._id, ...user.following];
+        const wishlistCountries = user.wishlistCountries || [];
+
+        // שאילתה מתוקנת ששומרת על פרטיות
+        const postsQuery = Post.find({
+            $or: [
+                // תנאי 1: הצג כל פוסט ששייך לקבוצה שהמשתמש חבר בה
+                { group: { $in: groupIds } },
+
+                // תנאי 2: הצג פוסטים ציבוריים (ללא קבוצה) שעונים לקריטריונים אחרים
+                {
+                    group: { $exists: false }, // הפוסט חייב להיות ציבורי
+                    $or: [
+                        { author: { $in: authorsForFeed } }, // נוצר ע"י מישהו במעקב
+                        { taggedCountries: { $in: wishlistCountries } } // או מתויג עם מדינה מה-wishlist
+                    ]
+                }
+            ]
+        }).sort({ createdAt: -1 });
+
         const posts = await populatePost(postsQuery);
         res.json(posts);
-    } catch (error) {
-        console.error("SERVER ERROR in getAllPosts:", error);
-        res.status(500).json({ message: 'Server error' });
+    } catch (err) {
+        console.error("Error fetching feed posts:", err);
+        res.status(500).send('Server Error');
     }
 };
 
-// --- Get all posts by a specific user ---
+// --- 🔥 קבלת פוסטים של משתמש ספציפי (לוגיקה מתוקנת לפרופיל) ---
 exports.getPostsByUser = async (req, res) => {
     try {
-        const postsQuery = Post.find({ author: req.params.userId }).sort({ createdAt: -1 });
+        // התנאי group: { $exists: false } מסנן החוצה את כל הפוסטים הקבוצתיים
+        const postsQuery = Post.find({
+            author: req.params.userId,
+            group: { $exists: false }
+        }).sort({ createdAt: -1 });
+
         const posts = await populatePost(postsQuery);
         res.json(posts);
     } catch (error) {
@@ -58,7 +94,22 @@ exports.getPostsByUser = async (req, res) => {
     }
 };
 
-// --- Delete a post ---
+// --- קבלת פוסטים של קבוצה ספציפית ---
+exports.getGroupPosts = async (req, res) => {
+    try {
+        const { groupId } = req.params;
+        const postsQuery = Post.find({ group: groupId }).sort({ createdAt: -1 });
+        const posts = await populatePost(postsQuery);
+        res.json(posts);
+    } catch (err) {
+        console.error("Error fetching group posts:", err);
+        res.status(500).send('Server Error');
+    }
+};
+
+
+// --- שאר הפונקציות (לייק, תגובה, מחיקה וכו') ---
+
 exports.deletePost = async (req, res) => {
     try {
         const postId = req.params.postId;
@@ -82,7 +133,6 @@ exports.deletePost = async (req, res) => {
     }
 };
 
-// --- Update a post ---
 exports.updatePost = async (req, res) => {
     try {
         const post = await Post.findById(req.params.postId);
@@ -91,7 +141,6 @@ exports.updatePost = async (req, res) => {
         }
         post.text = req.body.text;
         await post.save();
-        // ✅ FIX: Use the helper function to return the fully populated post
         const populatedPost = await populatePost(Post.findById(post._id));
         res.json(populatedPost);
     } catch (error) {
@@ -100,7 +149,6 @@ exports.updatePost = async (req, res) => {
     }
 };
 
-// --- Like/Unlike a post ---
 exports.toggleLike = async (req, res) => {
     try {
         const post = await Post.findById(req.params.postId);
@@ -115,7 +163,6 @@ exports.toggleLike = async (req, res) => {
             post.likes.push(userId);
         }
         await post.save();
-        // ✅ FIX: Use the helper function to return the fully populated post
         const updatedPost = await populatePost(Post.findById(post._id));
         res.json(updatedPost);
     } catch (error) {
@@ -124,7 +171,6 @@ exports.toggleLike = async (req, res) => {
     }
 };
 
-// --- Add a comment to a post ---
 exports.addComment = async (req, res) => {
     try {
         const { authorId, text } = req.body;
@@ -144,40 +190,14 @@ exports.addComment = async (req, res) => {
     }
 };
 
-// --- Get Smart Feed Posts ---
-exports.getFeedPosts = async (req, res) => {
+// הפונקציה הזו הופכת למיותרת כי הפיד החכם מחליף אותה, אבל נשאיר למקרה שיש שימוש ישן
+exports.getAllPosts = async (req, res) => {
     try {
-        const { userId } = req.params;
-        const user = await User.findById(userId);
-        if (!user) return res.status(404).json({ message: 'User not found.' });
-        const userGroups = await Group.find({ 'members.user': userId, 'members.status': 'approved' });
-        const groupIds = userGroups.map(group => group._id);
-        const authorsForFeed = [user._id, ...user.following];
-        const wishlistCountries = user.wishlistCountries || [];
-        const postsQuery = Post.find({
-            $or: [
-                { author: { $in: authorsForFeed } },
-                { taggedCountries: { $in: wishlistCountries } },
-                { group: { $in: groupIds } }
-            ]
-        }).sort({ createdAt: -1 });
+        const postsQuery = Post.find().sort({ createdAt: -1 });
         const posts = await populatePost(postsQuery);
         res.json(posts);
-    } catch (err) {
-        console.error("Error fetching feed posts:", err);
-        res.status(500).send('Server Error');
-    }
-};
-
-// --- Get Posts for a specific Group ---
-exports.getGroupPosts = async (req, res) => {
-    try {
-        const { groupId } = req.params;
-        const postsQuery = Post.find({ group: groupId }).sort({ createdAt: -1 });
-        const posts = await populatePost(postsQuery);
-        res.json(posts);
-    } catch (err) {
-        console.error("Error fetching group posts:", err);
-        res.status(500).send('Server Error');
+    } catch (error) {
+        console.error("SERVER ERROR in getAllPosts:", error);
+        res.status(500).json({ message: 'Server error' });
     }
 };

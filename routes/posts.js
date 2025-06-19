@@ -2,32 +2,37 @@ const express = require('express');
 const router = express.Router();
 const postController = require('../controllers/postController');
 
-router.post('/', postController.createPost);
-router.get('/feed/:userId', postController.getFeedPosts);
-router.get('/group/:groupId', postController.getGroupPosts);
-
-// GET /api/posts/ -> קבל את כל הפוסטים (עבור הפיד)
-router.get('/', postController.getAllPosts);
-
-// GET /api/posts/user/:userId -> קבל את כל הפוסטים של משתמש ספציפי
-router.get('/user/:userId', postController.getPostsByUser);
-
+// --- נתיבים ראשיים לפוסטים ---
 // POST /api/posts/ -> צור פוסט חדש
 router.post('/', postController.createPost);
 
-// POST /api/posts/:postId/like -> בצע לייק לפוסט
+// GET /api/posts/ -> קבל את כל הפוסטים (אם נדרש למקרה כללי)
+router.get('/', postController.getAllPosts);
+
+
+// --- נתיבים מיוחדים לפידים ומשתמשים ---
+// GET /api/posts/feed/:userId -> קבל את הפיד החכם של המשתמש
+router.get('/feed/:userId', postController.getFeedPosts);
+
+// GET /api/posts/user/:userId -> קבל את כל הפוסטים הציבוריים של משתמש ספציפי
+router.get('/user/:userId', postController.getPostsByUser);
+
+// GET /api/posts/group/:groupId -> קבל את כל הפוסטים של קבוצה ספציפית
+router.get('/group/:groupId', postController.getGroupPosts);
+
+
+// --- נתיבים לפעולות על פוסט ספציפי ---
+// DELETE /api/posts/:postId -> מחק פוסט
+router.delete('/:postId', postController.deletePost);
+
+// PUT /api/posts/:postId -> עדכן פוסט
+router.put('/:postId', postController.updatePost);
+
+// POST /api/posts/:postId/like -> בצע לייק/שלא-כמו לפוסט
 router.post('/:postId/like', postController.toggleLike);
 
 // POST /api/posts/:postId/comments -> הוסף תגובה לפוסט
 router.post('/:postId/comments', postController.addComment);
-
-router.delete('/:postId', postController.deletePost);
-
-router.put('/:postId', postController.updatePost);
-
-router.get('/feed/:userId', postController.getFeedPosts);
-
-router.get('/group/:groupId', postController.getGroupPosts);
 
 
 module.exports = router;
