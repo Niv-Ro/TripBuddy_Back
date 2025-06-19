@@ -4,21 +4,28 @@ const User = require('../models/User');
 // --- פונקציה לקבלת כל הצ'אטים של המשתמש ---
 exports.getMyChats = async (req, res) => {
     try {
-        // 🔥 שינוי: מקבלים את ה-ID ישירות מה-URL, כמו בקבוצות
         const { userId } = req.params;
 
-        const chats = await Chat.find({ 'members.user': userId })
+        // 🔥 שאילתה מתוקנת עם populate מקונן
+        const chats = await Chat.find({
+            'members.user': userId,
+            latestMessage: { $exists: true, $ne: null }
+        })
             .populate('members.user', 'fullName profileImageUrl')
             .populate('admin', 'fullName')
-            .populate('latestMessage')
+            .populate({
+                path: 'latestMessage', // אכלס את ההודעה האחרונה
+                populate: { // ובתוך ההודעה האחרונה, אכלס את השולח
+                    path: 'sender',
+                    model: 'User',
+                    select: 'fullName profileImageUrl'
+                }
+            })
             .sort({ updatedAt: -1 });
 
-        const populatedChats = await User.populate(chats, {
-            path: 'latestMessage.sender',
-            select: 'fullName'
-        });
+        // אין יותר צורך ב-User.populate נפרד
+        res.status(200).json(chats);
 
-        res.status(200).json(populatedChats);
     } catch (error) {
         console.error("Error in getMyChats: ", error);
         res.status(500).send("Server Error");
