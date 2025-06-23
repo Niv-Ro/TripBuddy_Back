@@ -1,13 +1,15 @@
 const Group = require('../models/Group');
 const Chat = require('../models/Chat');
-const User = require('../models/User'); // ודא שגם מודל User מיובא
+const User = require('../models/User');
 
-// יצירת קבוצה חדשה
+// --- Create a new group ---
 exports.createGroup = async (req, res) => {
     const { name, description, countries, adminUserId } = req.body;
+
     if (!name || !countries || !adminUserId) {
         return res.status(400).json({ message: 'Name, countries, and admin user ID are required.' });
     }
+
     try {
         const newGroup = new Group({
             name,
@@ -19,7 +21,7 @@ exports.createGroup = async (req, res) => {
         await newGroup.save();
 
         const newChat = await Chat.create({
-            name: `Group: ${newGroup.name}`,
+            name: `Group: ${newGroup.name}`, // Add "Group: " prefix for clarity
             isGroupChat: true,
             members: [{ user: adminUserId, role: 'admin' }],
             admin: adminUserId,
@@ -36,13 +38,14 @@ exports.createGroup = async (req, res) => {
     }
 };
 
-// קבלת כל הקבוצות וההזמנות של משתמש
+
+// --- Get all groups and invitations for a user ---
 exports.getMyGroupsAndInvites = async (req, res) => {
     try {
         const { userId } = req.params;
         const allInvolvements = await Group.find({ 'members.user': userId })
             .populate('members.user', 'fullName')
-            .populate('admin', 'fullName'); // ✅ הוספנו populate למנהל הקבוצה
+            .populate('admin', 'fullName'); // ✅ This populate is crucial for showing admin name in lists
 
         const approvedGroups = allInvolvements.filter(g => g.members.some(m => m.user && m.user._id.equals(userId) && m.status === 'approved'));
         const pendingInvites = allInvolvements.filter(g => g.members.some(m => m.user && m.user._id.equals(userId) && m.status === 'pending'));
@@ -54,7 +57,7 @@ exports.getMyGroupsAndInvites = async (req, res) => {
     }
 };
 
-// קבלת פרטים על קבוצה ספציפית
+// --- Get full details for a specific group ---
 exports.getGroupDetails = async (req, res) => {
     try {
         const group = await Group.findById(req.params.groupId)
@@ -68,7 +71,7 @@ exports.getGroupDetails = async (req, res) => {
     }
 };
 
-// חיפוש קבוצות
+// --- Search for public groups ---
 exports.searchGroups = async (req, res) => {
     try {
         const { q } = req.query;
@@ -76,10 +79,11 @@ exports.searchGroups = async (req, res) => {
             return res.json([]);
         }
         const groups = await Group.find({
-            name: { $regex: q, $options: 'i' }
+            name: { $regex: q, $options: 'i' },
+            isPrivate: false // Only search public groups for now
         })
-            .select('name description members countries admin') // ודא שהשדה admin נבחר
-            .populate('admin', 'fullName'); // ✅ הוספנו populate למנהל הקבוצה
+            .select('name description members countries admin') // Ensure admin field is selected
+            .populate('admin', 'fullName'); // ✅ This populate is crucial for showing admin name in search results
 
         res.json(groups);
     } catch (err) {
@@ -88,11 +92,12 @@ exports.searchGroups = async (req, res) => {
     }
 };
 
-// שליחת בקשת הצטרפות לקבוצה
+// --- User requests to join a group ---
 exports.requestToJoin = async (req, res) => {
     const { userId } = req.body;
+    const { groupId } = req.params;
     try {
-        const group = await Group.findById(req.params.groupId);
+        const group = await Group.findById(groupId);
         if (group.members.some(m => m.user.equals(userId))) {
             return res.status(400).json({ message: 'You are already a member or have a pending request.' });
         }
@@ -105,11 +110,12 @@ exports.requestToJoin = async (req, res) => {
     }
 };
 
-// מענה של מנהל לבקשת הצטרפות
+// --- Admin responds to a join request ---
 exports.respondToJoinRequest = async (req, res) => {
     const { adminId, requesterId, response } = req.body;
+    const { groupId } = req.params;
     try {
-        const group = await Group.findById(req.params.groupId);
+        const group = await Group.findById(groupId);
         if (!group.admin.equals(adminId)) {
             return res.status(403).json({ message: 'Only the admin can respond to requests.' });
         }
@@ -132,12 +138,12 @@ exports.respondToJoinRequest = async (req, res) => {
     }
 };
 
-
-// הזמנת משתמש לקבוצה (פעולת מנהל)
+// --- Admin invites a user to a group ---
 exports.inviteUser = async (req, res) => {
     const { adminId, inviteeId } = req.body;
+    const { groupId } = req.params;
     try {
-        const group = await Group.findById(req.params.groupId);
+        const group = await Group.findById(groupId);
         if (!group.admin.equals(adminId)) return res.status(403).json({ message: 'Only admin can invite users.' });
         if (group.members.some(m => m.user.equals(inviteeId))) return res.status(400).json({ message: 'User is already a member or invited.' });
 
@@ -150,11 +156,12 @@ exports.inviteUser = async (req, res) => {
     }
 };
 
-// תגובה להזמנה (פעולת מוזמן)
+// --- User responds to an invitation ---
 exports.respondToInvitation = async (req, res) => {
     const { userId, response } = req.body;
+    const { groupId } = req.params;
     try {
-        const group = await Group.findById(req.params.groupId);
+        const group = await Group.findById(groupId);
         const memberIndex = group.members.findIndex(m => m.user.equals(userId) && m.status === 'pending');
         if (memberIndex === -1) return res.status(404).json({ message: 'Invitation not found.' });
 
@@ -172,11 +179,12 @@ exports.respondToInvitation = async (req, res) => {
     }
 };
 
-// הסרת חבר מקבוצה (פעולת מנהל)
+// --- Admin removes a member from a group ---
 exports.removeMember = async (req, res) => {
     const { adminId, memberToRemoveId } = req.body;
+    const { groupId } = req.params;
     try {
-        const group = await Group.findById(req.params.groupId);
+        const group = await Group.findById(groupId);
         if (!group.admin.equals(adminId)) return res.status(403).json({ message: 'Only admin can remove members.' });
         if (group.admin.equals(memberToRemoveId)) return res.status(400).json({ message: 'Admin cannot remove themselves.' });
 
