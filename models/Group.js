@@ -3,6 +3,7 @@ const mongoose = require('mongoose');
 const GroupSchema = new mongoose.Schema({
     name: { type: String, required: true, trim: true },
     description: { type: String, trim: true },
+    imageUrl: { type: String, default: '' }, // שדה לתמונת הקבוצה
     countries: [{ type: String }],
     admin: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
     members: [{
@@ -10,9 +11,6 @@ const GroupSchema = new mongoose.Schema({
         status: { type: String, enum: ['pending', 'approved', 'pending_approval'], default: 'pending' }
     }],
     isPrivate: { type: Boolean, default: true },
-    // 🔥 הוספת שדה לתמונת הקבוצה
-    imageUrl: { type: String, default: null },
-    // 🔥 הוספת שדה לקישור הצ'אט
     linkedChat: { type: mongoose.Schema.Types.ObjectId, ref: 'Chat' }
 }, { timestamps: true });
 
