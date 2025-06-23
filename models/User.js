@@ -32,7 +32,11 @@ const UserSchema = new mongoose.Schema({
     followers: [{
         type: mongoose.Schema.Types.ObjectId,
         ref: 'User'
-    }]
+    }],
+    bio: {
+        type: String,
+        default: ''
+    }
 });
 
 module.exports = mongoose.model('User', UserSchema);

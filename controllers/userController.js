@@ -137,3 +137,32 @@ exports.searchUsers = async (req, res) => {
         res.status(500).json({ message: 'Server error' });
     }
 };
+
+
+// עדכון ביוגרפיה ותמונה
+exports.updateBio = async (req, res) => {
+    try {
+        const { bio, profileImageUrl } = req.body;
+        const user = await User.findByIdAndUpdate(
+            req.params.id,
+            { $set: { bio, ...(profileImageUrl && { profileImageUrl }) } },
+            { new: true }
+        );
+        if (!user) return res.status(404).json({ message: 'User not found' });
+        res.json(user);
+    } catch (err) {
+        res.status(500).json({ message: 'Failed to update bio', error: err.message });
+    }
+};
+
+// העלאת תמונת פרופיל (שמירה בתיקיית uploads)
+exports.uploadProfileImage = async (req, res) => {
+    try {
+        if (!req.file) return res.status(400).json({ message: 'No file uploaded' });
+        // בדוגמה זו שומרים ב-local, אפשר לשדרג ל-Cloudinary/Firebase אח"כ
+        const imageUrl = `/uploads/${req.file.filename}`;
+        res.json({ url: imageUrl });
+    } catch (err) {
+        res.status(500).json({ message: 'Image upload failed', error: err.message });
+    }
+};
