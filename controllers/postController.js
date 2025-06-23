@@ -197,3 +197,38 @@ exports.getAllPosts = async (req, res) => {
         res.status(500).json({ message: 'Server error' });
     }
 };
+
+// --- מחיקת תגובה בודדת ---
+exports.deleteComment = async (req, res) => {
+    try {
+        const { postId, commentId } = req.params;
+        const userId = req.body.userId; // Adjust if your user ID comes from elsewhere
+
+        const post = await Post.findById(postId);
+        const comment = await Comment.findById(commentId);
+
+        if (!post || !comment) {
+            return res.status(404).json({ message: 'Post or comment not found' });
+        }
+
+        // Only the comment's author or the post's owner can delete
+        if (
+            userId !== String(comment.author) &&
+            userId !== String(post.author)
+        ) {
+            return res.status(403).json({ message: 'Not authorized' });
+        }
+
+        await Comment.findByIdAndDelete(commentId);
+        await Post.findByIdAndUpdate(
+            postId,
+            { $pull: { comments: commentId } },
+            { new: true }
+        );
+
+        res.json({ message: 'Comment deleted successfully' });
+    } catch (error) {
+        console.error("SERVER ERROR in deleteComment:", error);
+        res.status(500).json({ message: 'Server error', error: error.message });
+    }
+};

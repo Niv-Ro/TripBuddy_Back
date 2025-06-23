@@ -34,4 +34,7 @@ router.post('/:postId/like', postController.toggleLike);
 // POST /api/posts/:postId/comments -> הוסף תגובה לפוסט
 router.post('/:postId/comments', postController.addComment);
 
+// DELETE /api/posts/:postId/comments/:commentId -> מחק תגובה בודדת
+router.delete('/:postId/comments/:commentId', postController.deleteComment);
+
 module.exports = router;
