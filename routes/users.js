@@ -8,7 +8,8 @@ router.post('/', userController.createUser);
 router.get('/search', userController.searchUsers);
 router.get('/id/:userId', userController.getUserById);
 router.get('/:email', userController.getUserByEmail);
-router.put('/:email/country-lists', userController.updateUserCountryLists); // 🔥 ה-Route החדש
+router.put('/:email/country-lists', userController.updateUserCountryLists);
 router.post('/:userIdToFollow/follow', userController.toggleFollow);
+
 
 module.exports = router;

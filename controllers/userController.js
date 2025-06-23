@@ -1,4 +1,5 @@
 const User = require('../models/User');
+const mongoose = require('mongoose');
 
 // === Create a new user in MongoDB ===
 exports.createUser = async (req, res) => {
@@ -37,7 +38,18 @@ exports.getUserByEmail = async (req, res) => {
 
 exports.getUserById = async (req, res) => {
     try {
-        const user = await User.findById(req.params.userId);
+        const { userId } = req.params;
+
+        // ✅ 2. הוספת בדיקת תקינות ל-ID
+        if (!mongoose.Types.ObjectId.isValid(userId)) {
+            // אם ה-ID אינו בפורמט תקין, החזר שגיאה ברורה במקום לקרוס
+            return res.status(400).json({ message: 'Invalid User ID format' });
+        }
+
+        const user = await User.findById(userId)
+            .populate('followers', 'fullName profileImageUrl') // אולי תרצה להוסיף את זה
+            .populate('following', 'fullName profileImageUrl'); // ואת זה
+
         if (!user) {
             return res.status(404).json({ message: 'User not found by ID' });
         }
@@ -47,6 +59,7 @@ exports.getUserById = async (req, res) => {
         res.status(500).json({ message: 'Server error' });
     }
 };
+
 
 // === Update a user's country lists ===
 exports.updateUserCountryLists = async (req, res) => {
@@ -104,27 +117,21 @@ exports.toggleFollow = async (req, res) => {
 
 // === Search for users (גרסה מתוקנת שעובדת עם השיטה שלך) ===
 exports.searchUsers = async (req, res) => {
+    const searchQuery = req.query.q;
+    if (!searchQuery) {
+        return res.json([]);
+    }
     try {
-        const { q, currentUserId } = req.query;
-
-        if (!q) {
-            return res.json([]);
-        }
-
-        const keywordQuery = {
+        const users = await User.find({
             $or: [
-                { fullName: { $regex: q, $options: 'i' } },
-                { email: { $regex: q, $options: 'i' } }
+                { fullName: { $regex: searchQuery, $options: 'i' } },
+                { email: { $regex: searchQuery, $options: 'i' } }
             ]
-        };
-
-        const users = await User.find(keywordQuery)
-            .where('_id').ne(currentUserId)
+        })
             .limit(10)
-            .select('fullName profileImageUrl email');
+            .select('fullName profileImageUrl email _id');
 
         res.json(users);
-
     } catch (error) {
         console.error('Error searching for users:', error);
         res.status(500).json({ message: 'Server error' });

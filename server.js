@@ -6,6 +6,7 @@ require('dotenv').config();
 require('./config/firebaseAdmin');
 const http = require('http');
 const { Server } = require('socket.io');
+
 // ייבוא קבצי ה-Routes
 const userRoutes = require('./routes/users');
 const postRoutes = require('./routes/posts');
@@ -13,24 +14,18 @@ const groupRoutes = require('./routes/groups');
 const chatRoutes = require('./routes/chatRoutes');
 const messageRoutes = require('./routes/messageRoutes');
 
-
 const app = express();
 const server = http.createServer(app);
-const io = new Server(server, { // 4. אתחול socket.io על שרת ה-http
+
+// הגדרת socket.io
+const io = new Server(server, {
     cors: {
-        origin: "http://localhost:3000", // החלף בכתובת ה-frontend שלך
+        origin: "http://localhost:3000",
         methods: ["GET", "POST"]
     }
 });
-// הגדרת CORS פתוחה (פתר את הבעיה הקודמת)
+
 app.use(cors());
-// app.use(cors({
-//     origin: ['http://localhost:3000',
-//         'http://localhost:3001',
-//         'http://127.0.0.1:3000',
-//         'http://localhost:5000'],
-//     credentials: true
-// }));
 app.use(bodyParser.json());
 
 // --- Routes Section ---
@@ -44,29 +39,23 @@ app.use('/api/messages', messageRoutes);
 io.on('connection', (socket) => {
     console.log('User connected to Socket.io:', socket.id);
 
-    // כשהמשתמש מתחבר, הוא נכנס ל"חדר" אישי על שם ה-ID שלו
     socket.on('setup', (userId) => {
         socket.join(userId);
         socket.emit('connected');
+        console.log(`User ${userId} setup complete.`);
     });
 
-    // כשהמשתמש פותח צ'אט, הוא מצטרף לחדר של הצ'אט
-    socket.on('join chat', (room) => {
-        socket.join(room);
-        console.log(`User ${socket.id} joined room: ${room}`);
+    socket.on('join chat', (chatId) => {
+        socket.join(chatId);
+        console.log(`User ${socket.id} joined room: ${chatId}`);
     });
 
-    // כשנשלחת הודעה חדשה
     socket.on('new message', (newMessageReceived) => {
         const chat = newMessageReceived.chat;
-        if (!chat.members) return console.log("Chat members not defined");
+        if (!chat || !chat._id) return console.log("Chat ID not defined in received message");
 
-        // שלח את ההודעה לכל המשתמשים בחדר, חוץ מהשולח
-        chat.members.forEach(member => {
-            if (member.user._id == newMessageReceived.sender._id) return;
-            // 'message received' הוא שם האירוע שה-frontend יאזין לו
-            socket.in(member.user._id).emit('message received', newMessageReceived);
-        });
+        // שלח את ההודעה לכולם בחדר של הצ'אט
+        io.to(chat._id).emit('message received', newMessageReceived);
     });
 
     socket.on('disconnect', () => {
@@ -86,9 +75,8 @@ mongoose.connect(MONGO_URI)
 // --- Server Start ---
 const HOST = 'localhost';
 const PORT = process.env.PORT || 5000;
-app.listen(PORT, HOST, () => {
+
+// ✅ התיקון הקריטי: הפעל את השרת המשולב
+server.listen(PORT, HOST, () => {
     console.log(`Server listening on http://${HOST}:${PORT}`);
 });
-
-
-
