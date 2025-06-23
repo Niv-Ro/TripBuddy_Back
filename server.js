@@ -1,7 +1,7 @@
 const express = require('express');
 const mongoose = require('mongoose');
 const cors = require('cors');
-const bodyParser = require('body-parser');
+// const bodyParser = require('body-parser');
 require('dotenv').config();
 require('./config/firebaseAdmin');
 const http = require('http');
@@ -26,7 +26,8 @@ const io = new Server(server, {
 });
 
 app.use(cors());
-app.use(bodyParser.json());
+// app.use(bodyParser.json());
+app.use(express.json());
 
 // --- Routes Section ---
 app.use('/api/users', userRoutes);

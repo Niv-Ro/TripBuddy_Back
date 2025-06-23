@@ -4,7 +4,7 @@ const User = require('../models/User');
 
 // --- Create a new group ---
 exports.createGroup = async (req, res) => {
-    const { name, description, countries, adminUserId } = req.body;
+    const { name, description, countries, adminUserId,isPrivate } = req.body;
 
     if (!name || !countries || !adminUserId) {
         return res.status(400).json({ message: 'Name, countries, and admin user ID are required.' });
@@ -16,7 +16,8 @@ exports.createGroup = async (req, res) => {
             description,
             countries,
             admin: adminUserId,
-            members: [{ user: adminUserId, status: 'approved' }]
+            members: [{ user: adminUserId, status: 'approved' }],
+            isPrivate: String(isPrivate) === "true"
         });
         await newGroup.save();
 
