@@ -1,7 +1,9 @@
 const express = require('express');
 const mongoose = require('mongoose');
 const cors = require('cors');
-// const bodyParser = require('body-parser');
+const multer = require('multer'); // הוספה לטיפול בקבצים
+const path = require('path'); // הוספה לטיפול בנתיבים
+const fs = require('fs'); // הוספה לטיפול בקבצים
 require('dotenv').config();
 require('./config/firebaseAdmin');
 const http = require('http');
@@ -17,6 +19,43 @@ const messageRoutes = require('./routes/messageRoutes');
 const app = express();
 const server = http.createServer(app);
 
+// יצירת תיקיית uploads אם לא קיימת
+const uploadsDir = 'uploads/groups';
+if (!fs.existsSync('uploads')) {
+    fs.mkdirSync('uploads');
+}
+if (!fs.existsSync(uploadsDir)) {
+    fs.mkdirSync(uploadsDir, { recursive: true });
+}
+
+// הגדרת multer לשמירת קבצים
+const storage = multer.diskStorage({
+    destination: (req, file, cb) => {
+        cb(null, uploadsDir);
+    },
+    filename: (req, file, cb) => {
+        const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
+        const fileExtension = path.extname(file.originalname);
+        cb(null, `group-${uniqueSuffix}${fileExtension}`);
+    }
+});
+
+const fileFilter = (req, file, cb) => {
+    if (file.mimetype.startsWith('image/')) {
+        cb(null, true);
+    } else {
+        cb(new Error('Only image files are allowed!'), false);
+    }
+};
+
+const upload = multer({
+    storage: storage,
+    fileFilter: fileFilter,
+    limits: {
+        fileSize: 5 * 1024 * 1024 // 5MB
+    }
+});
+
 // הגדרת socket.io
 const io = new Server(server, {
     cors: {
@@ -26,8 +65,30 @@ const io = new Server(server, {
 });
 
 app.use(cors());
-// app.use(bodyParser.json());
 app.use(express.json());
+
+// הגדרת קבצים סטטיים - תמונות הקבוצות יהיו נגישות דרך /uploads
+app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
+
+// נתב להעלאת תמונות קבוצות - מוטמע בשרת הקיים
+app.post('/api/groups/upload-image', upload.single('image'), (req, res) => {
+    try {
+        if (!req.file) {
+            return res.status(400).json({ message: 'No image file uploaded' });
+        }
+
+        const imageUrl = `${req.protocol}://${req.get('host')}/uploads/groups/${req.file.filename}`;
+
+        res.json({
+            message: 'Image uploaded successfully',
+            imageUrl: imageUrl,
+            filename: req.file.filename
+        });
+    } catch (error) {
+        console.error('Error uploading image:', error);
+        res.status(500).json({ message: 'Error uploading image', error: error.message });
+    }
+});
 
 // --- Routes Section ---
 app.use('/api/users', userRoutes);
@@ -78,6 +139,21 @@ io.on('connection', (socket) => {
     });
 });
 
+// טיפול בשגיאות multer
+app.use((error, req, res, next) => {
+    if (error instanceof multer.MulterError) {
+        if (error.code === 'LIMIT_FILE_SIZE') {
+            return res.status(400).json({ message: 'File too large. Maximum size is 5MB.' });
+        }
+    }
+
+    if (error.message === 'Only image files are allowed!') {
+        return res.status(400).json({ message: 'Only image files are allowed!' });
+    }
+
+    next(error);
+});
+
 // --- Database Connection ---
 const MONGO_URI = process.env.MONGO_URI;
 mongoose.connect(MONGO_URI)
@@ -103,5 +179,3 @@ server.listen(PORT, HOST, () => {
 //         'http://localhost:5000'],
 //     credentials: true
 // }));
-
-

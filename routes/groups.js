@@ -1,9 +1,6 @@
-
 const express = require('express');
 const router = express.Router();
 const groupController = require('../controllers/groupController');
-
-
 
 router.post('/', groupController.createGroup);
 router.get('/my-groups/:userId', groupController.getMyGroupsAndInvites);
@@ -14,5 +11,6 @@ router.post('/:groupId/invitations/respond', groupController.respondToInvitation
 router.post('/:groupId/remove-member', groupController.removeMember);
 router.post('/:groupId/request-join', groupController.requestToJoin); // נתב חדש לבקשת הצטרפות
 router.post('/:groupId/respond-request', groupController.respondToJoinRequest); // נתב חדש למענה לבקשה
+router.delete('/:groupId', groupController.deleteGroup); // NEW: Delete group route
 
 module.exports = router;

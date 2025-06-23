@@ -110,21 +110,64 @@ exports.deletePost = async (req, res) => {
         if (!post) {
             return res.status(404).json({ message: 'Post not found' });
         }
+
+        // Delete media files from Firebase Storage
         if (post.media && post.media.length > 0) {
             const bucket = storage.bucket();
             const deletePromises = post.media
-                .filter(file => file && file.path)
-                .map(file => bucket.file(file.path).delete());
-            await Promise.all(deletePromises);
+                .filter(file => file && file.path) // Keep this filter for files that have path
+                .map(async (file) => {
+                    try {
+                        // Try to delete using the stored path
+                        await bucket.file(file.path).delete();
+                        console.log(`Deleted file: ${file.path}`);
+                    } catch (error) {
+                        // If path doesn't work, try to extract path from URL
+                        try {
+                            const urlPath = extractPathFromFirebaseURL(file.url);
+                            if (urlPath) {
+                                await bucket.file(urlPath).delete();
+                                console.log(`Deleted file using URL path: ${urlPath}`);
+                            }
+                        } catch (urlError) {
+                            console.error(`Failed to delete file: ${file.url}`, urlError);
+                        }
+                    }
+                });
+
+            await Promise.allSettled(deletePromises); // Use allSettled to continue even if some deletions fail
         }
+
+        // Delete all comments associated with the post
         await Comment.deleteMany({ _id: { $in: post.comments } });
+
+        // Delete the post itself
         await Post.findByIdAndDelete(postId);
+
         res.json({ message: 'Post and all associated data deleted successfully' });
     } catch (error) {
         console.error("SERVER ERROR in deletePost:", error);
         res.status(500).json({ message: 'Server error', error: error.message });
     }
 };
+
+// Helper function to extract file path from Firebase Storage URL
+function extractPathFromFirebaseURL(url) {
+    try {
+        // Firebase Storage URLs typically look like:
+        // https://firebasestorage.googleapis.com/v0/b/bucket-name/o/path%2Fto%2Ffile.jpg?alt=media&token=...
+        const urlObj = new URL(url);
+        const pathParam = urlObj.pathname.split('/o/')[1];
+        if (pathParam) {
+            // Decode the URL-encoded path
+            return decodeURIComponent(pathParam.split('?')[0]);
+        }
+        return null;
+    } catch (error) {
+        console.error('Error extracting path from URL:', error);
+        return null;
+    }
+}
 
 // --- עדכון פוסט ---
 exports.updatePost = async (req, res) => {

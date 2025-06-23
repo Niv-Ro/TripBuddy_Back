@@ -10,6 +10,8 @@ const GroupSchema = new mongoose.Schema({
         status: { type: String, enum: ['pending', 'approved', 'pending_approval'], default: 'pending' }
     }],
     isPrivate: { type: Boolean, default: true },
+    // 🔥 הוספת שדה לתמונת הקבוצה
+    imageUrl: { type: String, default: null },
     // 🔥 הוספת שדה לקישור הצ'אט
     linkedChat: { type: mongoose.Schema.Types.ObjectId, ref: 'Chat' }
 }, { timestamps: true });

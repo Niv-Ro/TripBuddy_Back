@@ -1,5 +1,6 @@
 const Chat = require('../models/Chat');
 const User = require('../models/User');
+const Message = require('../models/Message'); // Add this import
 
 // --- פונקציה לקבלת כל הצ'אטים של המשתמש ---
 exports.getMyChats = async (req, res) => {
@@ -65,5 +66,55 @@ exports.createOrAccessChat = async (req, res) => {
     } catch (error) {
         console.error("Error in createOrAccessChat: ", error);
         res.status(500).send("Server Error");
+    }
+};
+
+// --- NEW: Delete Chat Function ---
+exports.deleteChat = async (req, res) => {
+    const { chatId } = req.params;
+    const { userId } = req.body;
+
+    try {
+        // Find the chat and verify it exists
+        const chat = await Chat.findById(chatId);
+        if (!chat) {
+            return res.status(404).json({ message: 'Chat not found.' });
+        }
+
+        // Check if user is a member of the chat
+        const isMember = chat.members.some(member => member.user.equals(userId));
+        if (!isMember) {
+            return res.status(403).json({ message: 'You are not authorized to delete this chat.' });
+        }
+
+        // For group chats, only admin can delete
+        if (chat.isGroupChat && !chat.admin.equals(userId)) {
+            return res.status(403).json({ message: 'Only the group admin can delete this chat.' });
+        }
+
+        console.log(`Starting deletion process for chat: ${chat.name || 'Private Chat'} (ID: ${chatId})`);
+
+        // 1. Delete all messages belonging to this chat
+        const deletedMessages = await Message.deleteMany({ chat: chatId });
+        console.log(`Deleted ${deletedMessages.deletedCount} messages`);
+
+        // 2. Delete the chat itself
+        await Chat.findByIdAndDelete(chatId);
+        console.log(`Deleted chat: ${chat.name || 'Private Chat'}`);
+
+        res.json({
+            message: 'Chat and all messages deleted successfully',
+            deletedItems: {
+                chat: 1,
+                messages: deletedMessages.deletedCount
+            }
+        });
+
+    } catch (err) {
+        console.error("Error in deleteChat:", err);
+        res.status(500).json({
+            message: 'Failed to delete chat',
+            error: err.message
+        });
     }
 };
