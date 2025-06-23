@@ -6,16 +6,19 @@ exports.getMyChats = async (req, res) => {
     try {
         const { userId } = req.params;
 
-        // 🔥 שאילתה מתוקנת עם populate מקונן
+        // 🔥 שאילתה משופרת שמציגה צ'אטים קבוצתיים תמיד, וצ'אטים פרטיים רק אם אינם ריקים
         const chats = await Chat.find({
             'members.user': userId,
-            latestMessage: { $exists: true, $ne: null }
+            $or: [
+                { isGroupChat: true }, // תנאי 1: הצג תמיד אם זה צ'אט קבוצתי
+                { latestMessage: { $exists: true, $ne: null } } // תנאי 2: או אם יש לו הודעות
+            ]
         })
             .populate('members.user', 'fullName profileImageUrl')
             .populate('admin', 'fullName')
             .populate({
-                path: 'latestMessage', // אכלס את ההודעה האחרונה
-                populate: { // ובתוך ההודעה האחרונה, אכלס את השולח
+                path: 'latestMessage',
+                populate: {
                     path: 'sender',
                     model: 'User',
                     select: 'fullName profileImageUrl'
@@ -23,7 +26,6 @@ exports.getMyChats = async (req, res) => {
             })
             .sort({ updatedAt: -1 });
 
-        // אין יותר צורך ב-User.populate נפרד
         res.status(200).json(chats);
 
     } catch (error) {

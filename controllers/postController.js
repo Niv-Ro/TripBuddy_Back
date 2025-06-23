@@ -37,7 +37,7 @@ exports.createPost = async (req, res) => {
     }
 };
 
-// --- 🔥 קבלת פוסטים לפיד הראשי (לוגיקה מתוקנת ומאובטחת) ---
+// --- קבלת פוסטים לפיד הראשי (לוגיקה מתוקנת) ---
 exports.getFeedPosts = async (req, res) => {
     try {
         const { userId } = req.params;
@@ -52,18 +52,14 @@ exports.getFeedPosts = async (req, res) => {
         const authorsForFeed = [user._id, ...user.following];
         const wishlistCountries = user.wishlistCountries || [];
 
-        // שאילתה מתוקנת ששומרת על פרטיות
         const postsQuery = Post.find({
             $or: [
-                // תנאי 1: הצג כל פוסט ששייך לקבוצה שהמשתמש חבר בה
                 { group: { $in: groupIds } },
-
-                // תנאי 2: הצג פוסטים ציבוריים (ללא קבוצה) שעונים לקריטריונים אחרים
                 {
-                    group: { $exists: false }, // הפוסט חייב להיות ציבורי
+                    group: null, // התיקון: חפש פוסטים בהם השדה group הוא null
                     $or: [
-                        { author: { $in: authorsForFeed } }, // נוצר ע"י מישהו במעקב
-                        { taggedCountries: { $in: wishlistCountries } } // או מתויג עם מדינה מה-wishlist
+                        { author: { $in: authorsForFeed } },
+                        { taggedCountries: { $in: wishlistCountries } }
                     ]
                 }
             ]
@@ -77,13 +73,12 @@ exports.getFeedPosts = async (req, res) => {
     }
 };
 
-// --- 🔥 קבלת פוסטים של משתמש ספציפי (לוגיקה מתוקנת לפרופיל) ---
+// --- קבלת פוסטים של משתמש ספציפי (לוגיקה מתוקנת לפרופיל) ---
 exports.getPostsByUser = async (req, res) => {
     try {
-        // התנאי group: { $exists: false } מסנן החוצה את כל הפוסטים הקבוצתיים
         const postsQuery = Post.find({
             author: req.params.userId,
-            group: { $exists: false }
+            group: null // התיקון: חפש פוסטים בהם השדה group הוא null
         }).sort({ createdAt: -1 });
 
         const posts = await populatePost(postsQuery);
@@ -107,9 +102,7 @@ exports.getGroupPosts = async (req, res) => {
     }
 };
 
-
-// --- שאר הפונקציות (לייק, תגובה, מחיקה וכו') ---
-
+// --- מחיקת פוסט ---
 exports.deletePost = async (req, res) => {
     try {
         const postId = req.params.postId;
@@ -124,7 +117,7 @@ exports.deletePost = async (req, res) => {
                 .map(file => bucket.file(file.path).delete());
             await Promise.all(deletePromises);
         }
-        await Comment.deleteMany({ post: postId });
+        await Comment.deleteMany({ _id: { $in: post.comments } });
         await Post.findByIdAndDelete(postId);
         res.json({ message: 'Post and all associated data deleted successfully' });
     } catch (error) {
@@ -133,6 +126,7 @@ exports.deletePost = async (req, res) => {
     }
 };
 
+// --- עדכון פוסט ---
 exports.updatePost = async (req, res) => {
     try {
         const post = await Post.findById(req.params.postId);
@@ -149,6 +143,7 @@ exports.updatePost = async (req, res) => {
     }
 };
 
+// --- לייק/הסרת לייק לפוסט ---
 exports.toggleLike = async (req, res) => {
     try {
         const post = await Post.findById(req.params.postId);
@@ -171,6 +166,7 @@ exports.toggleLike = async (req, res) => {
     }
 };
 
+// --- הוספת תגובה לפוסט ---
 exports.addComment = async (req, res) => {
     try {
         const { authorId, text } = req.body;
@@ -190,7 +186,7 @@ exports.addComment = async (req, res) => {
     }
 };
 
-// הפונקציה הזו הופכת למיותרת כי הפיד החכם מחליף אותה, אבל נשאיר למקרה שיש שימוש ישן
+// --- פונקציה למקרה שיש שימוש ישן בקבלת כל הפוסטים ---
 exports.getAllPosts = async (req, res) => {
     try {
         const postsQuery = Post.find().sort({ createdAt: -1 });

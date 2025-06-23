@@ -6,7 +6,7 @@ const postController = require('../controllers/postController');
 // POST /api/posts/ -> צור פוסט חדש
 router.post('/', postController.createPost);
 
-// GET /api/posts/ -> קבל את כל הפוסטים (אם נדרש למקרה כללי)
+// GET /api/posts/ -> קבל את כל הפוסטים
 router.get('/', postController.getAllPosts);
 
 
@@ -14,10 +14,10 @@ router.get('/', postController.getAllPosts);
 // GET /api/posts/feed/:userId -> קבל את הפיד החכם של המשתמש
 router.get('/feed/:userId', postController.getFeedPosts);
 
-// GET /api/posts/user/:userId -> קבל את כל הפוסטים הציבוריים של משתמש ספציפי
+// GET /api/posts/user/:userId -> קבל את הפוסטים הציבוריים של משתמש
 router.get('/user/:userId', postController.getPostsByUser);
 
-// GET /api/posts/group/:groupId -> קבל את כל הפוסטים של קבוצה ספציפית
+// GET /api/posts/group/:groupId -> קבל את הפוסטים של קבוצה
 router.get('/group/:groupId', postController.getGroupPosts);
 
 
@@ -33,6 +33,5 @@ router.post('/:postId/like', postController.toggleLike);
 
 // POST /api/posts/:postId/comments -> הוסף תגובה לפוסט
 router.post('/:postId/comments', postController.addComment);
-
 
 module.exports = router;

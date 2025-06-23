@@ -7,7 +7,7 @@ require('./config/firebaseAdmin');
 const http = require('http');
 const { Server } = require('socket.io');
 
-// Import route files
+// ייבוא קבצי ה-Routes
 const userRoutes = require('./routes/users');
 const postRoutes = require('./routes/posts');
 const groupRoutes = require('./routes/groups');
@@ -16,6 +16,8 @@ const messageRoutes = require('./routes/messageRoutes');
 
 const app = express();
 const server = http.createServer(app);
+
+// הגדרת socket.io
 const io = new Server(server, {
     cors: {
         origin: "http://localhost:3000",
@@ -23,45 +25,50 @@ const io = new Server(server, {
     }
 });
 
-// CORS setup
 app.use(cors());
 app.use(bodyParser.json());
 
-// Routes Section
+// --- Routes Section ---
 app.use('/api/users', userRoutes);
 app.use('/api/posts', postRoutes);
 app.use('/api/groups', groupRoutes);
 app.use('/api/chats', chatRoutes);
 app.use('/api/messages', messageRoutes);
 
-// Socket.io Logic
+// --- לוגיקת Socket.io ---
 io.on('connection', (socket) => {
     console.log('User connected to Socket.io:', socket.id);
 
-    // When user connects, they join their personal room by their ID
     socket.on('setup', (userId) => {
         socket.join(userId);
         socket.emit('connected');
-        console.log(`User ${userId} connected and joined room`);
+        console.log(`User ${userId} setup complete.`);
     });
 
-    // When user opens a chat, they join the chat room
-    socket.on('join chat', (room) => {
-        socket.join(room);
-        console.log(`User ${socket.id} joined room: ${room}`);
+    socket.on('join chat', (chatId) => {
+        socket.join(chatId);
+        console.log(`User ${socket.id} joined room: ${chatId}`);
     });
 
-    // When a new message is sent
     socket.on('new message', (newMessageReceived) => {
         const chat = newMessageReceived.chat;
-        if (!chat.members) return console.log("Chat members not defined");
+        if (!chat || !chat.members) return console.log("Chat or members not defined");
 
-        // Send message to all users in the room except the sender
+        // ✅ 1. השידור הראשי: שלח את ההודעה לחדר של הצ'אט לכל המשתתפים חוץ מהשולח.
+        // זה פותר את בעיית ההודעה הכפולה.
+        socket.broadcast
+            .to(chat._id.toString())
+            .emit("message received", newMessageReceived);
+
+        // ✅ 2. עדכון רשימת השיחות: שלח אירוע נפרד לחדרים האישיים של שאר המשתתפים
+        // כדי שהם ידעו לרענן את רשימת השיחות שלהם.
         chat.members.forEach(member => {
-            if (member.user._id == newMessageReceived.sender._id) return;
+            const memberId = member.user?._id?.toString() || member.user?.toString();
+            const senderId = newMessageReceived.sender?._id?.toString();
 
-            // Emit to the user's personal room
-            socket.in(member.user._id).emit('message received', newMessageReceived);
+            if (memberId && memberId !== senderId) {
+                io.to(memberId).emit("update conversation list", newMessageReceived);
+            }
         });
     });
 
@@ -70,7 +77,7 @@ io.on('connection', (socket) => {
     });
 });
 
-// Database Connection
+// --- Database Connection ---
 const MONGO_URI = process.env.MONGO_URI;
 mongoose.connect(MONGO_URI)
     .then(() => console.log('Successfully connected to MongoDB'))
@@ -79,16 +86,14 @@ mongoose.connect(MONGO_URI)
         process.exit();
     });
 
-// Server Start - Use server.listen instead of app.listen for socket.io
+// --- Server Start ---
 const HOST = 'localhost';
 const PORT = process.env.PORT || 5000;
+
+// ✅ התיקון הקריטי: הפעל את השרת המשולב
 server.listen(PORT, HOST, () => {
     console.log(`Server listening on http://${HOST}:${PORT}`);
 });
-
-
-
-
 
 // app.use(cors({
 //     origin: ['http://localhost:3000',
