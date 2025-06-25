@@ -41,6 +41,10 @@ exports.createPost = async (req, res) => {
 exports.getFeedPosts = async (req, res) => {
     try {
         const { userId } = req.params;
+        const page = parseInt(req.query.page) || 1; // קבל את מספר העמוד מהבקשה, ברירת מחדל 1
+        const limit = parseInt(req.query.limit) || 10; // קבל את כמות הפריטים, ברירת מחדל 10
+        const skip = (page - 1) * limit; // חשב על כמה פוסטים לדלג
+
         const user = await User.findById(userId);
         if (!user) {
             return res.status(404).json({ message: 'User not found.' });
@@ -48,25 +52,35 @@ exports.getFeedPosts = async (req, res) => {
 
         const userGroups = await Group.find({ 'members.user': userId, 'members.status': 'approved' });
         const groupIds = userGroups.map(group => group._id);
-
         const authorsForFeed = [user._id, ...user.following];
         const wishlistCountries = user.wishlistCountries || [];
 
-        const postsQuery = Post.find({
+        const query = {
             $or: [
                 { group: { $in: groupIds } },
                 {
-                    group: null, // התיקון: חפש פוסטים בהם השדה group הוא null
+                    group: null,
                     $or: [
                         { author: { $in: authorsForFeed } },
                         { taggedCountries: { $in: wishlistCountries } }
                     ]
                 }
             ]
-        }).sort({ createdAt: -1 });
+        };
+
+        const postsQuery = Post.find(query)
+            .sort({ createdAt: -1 })
+            .skip(skip)   // ✅ דלג על הפוסטים מהעמודים הקודמים
+            .limit(limit); // ✅ הגבל את מספר הפוסטים למנה
 
         const posts = await populatePost(postsQuery);
-        res.json(posts);
+
+        // בדוק אם יש עוד פוסטים לטעון בעתיד
+        const totalPosts = await Post.countDocuments(query);
+        const hasMore = (page * limit) < totalPosts;
+
+        res.json({ posts, hasMore }); // החזר גם את הפוסטים וגם את הדגל hasMore
+
     } catch (err) {
         console.error("Error fetching feed posts:", err);
         res.status(500).send('Server Error');
