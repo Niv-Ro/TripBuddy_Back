@@ -115,19 +115,43 @@ exports.toggleFollow = async (req, res) => {
 
 // === Search for users (גרסה מתוקנת שעובדת עם השיטה שלך) ===
 exports.searchUsers = async (req, res) => {
-    const searchQuery = req.query.q;
-    if (!searchQuery) {
-        return res.json([]);
-    }
     try {
-        const users = await User.find({
-            $or: [
-                { fullName: { $regex: searchQuery, $options: 'i' } },
-                { email: { $regex: searchQuery, $options: 'i' } }
-            ]
-        })
-            .limit(10)
-            .select('fullName profileImageUrl email _id');
+        const { name, minAge, maxAge, gender } = req.query;
+        let query = {};
+
+        // 1. סינון לפי שם
+        if (name) {
+            query.fullName = { $regex: name, $options: 'i' };
+        }
+
+        // 2. סינון לפי טווח גילאים
+        const ageQuery = {};
+        const today = new Date();
+        if (minAge && !isNaN(minAge)) {
+            const maxBirthDate = new Date(today.getFullYear() - parseInt(minAge), today.getMonth(), today.getDate());
+            ageQuery.$lte = maxBirthDate;
+        }
+        if (maxAge && !isNaN(maxAge)) {
+            const minBirthDate = new Date(today.getFullYear() - parseInt(maxAge) - 1, today.getMonth(), today.getDate());
+            ageQuery.$gte = minBirthDate;
+        }
+        if (Object.keys(ageQuery).length > 0) {
+            query.birthDate = ageQuery;
+        }
+
+        // 3. סינון לפי מין
+        if (gender && gender !== 'any') {
+            query.gender = gender;
+        }
+
+        // הרץ חיפוש רק אם יש לפחות פילטר אחד
+        if (Object.keys(query).length === 0) {
+            return res.json([]);
+        }
+
+        const users = await User.find(query)
+            .limit(50)
+            .select('fullName profileImageUrl email birthDate gender');
 
         res.json(users);
     } catch (error) {
