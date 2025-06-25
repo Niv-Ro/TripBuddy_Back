@@ -64,56 +64,54 @@ exports.getUserById = async (req, res) => {
 // === Update a user's country lists ===
 exports.updateUserCountryLists = async (req, res) => {
     try {
-        const { visited, wishlist, visitedCcn3, wishlistCcn3 } = req.body;
-        const userEmail = req.params.email;
-        if (!Array.isArray(visited) || !Array.isArray(wishlist) || !Array.isArray(visitedCcn3) || !Array.isArray(wishlistCcn3)) {
+        const { visited, wishlist } = req.body;
+        const { userId } = req.params;
+
+        if (!Array.isArray(visited) || !Array.isArray(wishlist)) {
             return res.status(400).json({ message: 'Invalid data format.' });
         }
-        const updatedUser = await User.findOneAndUpdate(
-            { email: userEmail },
-            { $set: { visitedCountries: visited, wishlistCountries: wishlist, visitedCountriesCcn3: visitedCcn3, wishlistCountriesCcn3: wishlistCcn3 } },
+
+        const updatedUser = await User.findByIdAndUpdate(
+            userId,
+            { $set: { visitedCountries: visited, wishlistCountries: wishlist } },
             { new: true }
         );
+
         if (!updatedUser) {
             return res.status(404).json({ message: 'User not found' });
         }
-        res.json({ message: 'Lists updated successfully', user: updatedUser });
+        res.json(updatedUser);
     } catch (error) {
         console.error('Error updating country lists:', error);
         res.status(500).json({ message: 'Server error' });
     }
 };
 
+// ✅ התיקון: הפונקציה מחזירה את שני המשתמשים המעודכנים לסנכרון מלא
 exports.toggleFollow = async (req, res) => {
-    const { userIdToFollow } = req.params;
+    const { userId } = req.params;
     const { loggedInUserId } = req.body;
-    if (!loggedInUserId) {
-        return res.status(400).json({ message: "loggedInUserId is required in the request body." });
-    }
-    if (userIdToFollow === loggedInUserId) {
-        return res.status(400).json({ message: "You cannot follow yourself." });
-    }
     try {
-        const loggedInUser = await User.findById(loggedInUserId);
-        const userToFollow = await User.findById(userIdToFollow);
-        if (!userToFollow || !loggedInUser) {
-            return res.status(404).json({ message: "User not found." });
-        }
-        const isFollowing = loggedInUser.following.includes(userIdToFollow);
-        if (isFollowing) {
-            await User.findByIdAndUpdate(loggedInUserId, { $pull: { following: userIdToFollow } });
-            await User.findByIdAndUpdate(userIdToFollow, { $pull: { followers: loggedInUserId } });
-            res.json({ message: 'Successfully unfollowed user.' });
-        } else {
-            await User.findByIdAndUpdate(loggedInUserId, { $addToSet: { following: userIdToFollow } });
-            await User.findByIdAndUpdate(userIdToFollow, { $addToSet: { followers: loggedInUserId } });
-            res.json({ message: 'Successfully followed user.' });
-        }
+        const currentUser = await User.findById(loggedInUserId);
+        const targetUser = await User.findById(userId);
+        if (!currentUser || !targetUser) return res.status(404).json({ message: "User not found." });
+
+        const isFollowing = currentUser.following.includes(userId);
+        const updateOperator = isFollowing ? '$pull' : '$addToSet';
+
+        await User.findByIdAndUpdate(loggedInUserId, { [updateOperator]: { following: userId } });
+        await User.findByIdAndUpdate(userId, { [updateOperator]: { followers: loggedInUserId } });
+
+        const updatedCurrentUser = await User.findById(loggedInUserId);
+        const updatedTargetUser = await User.findById(userId).populate('followers', 'fullName profileImageUrl').populate('following', 'fullName profileImageUrl');
+
+        res.json({ currentUser: updatedCurrentUser, targetUser: updatedTargetUser });
     } catch (error) {
         console.error('Error in toggleFollow:', error);
         res.status(500).json({ message: 'Server error' });
     }
 };
+
 
 // === Search for users (גרסה מתוקנת שעובדת עם השיטה שלך) ===
 exports.searchUsers = async (req, res) => {

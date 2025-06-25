@@ -10,8 +10,8 @@ router.post('/', userController.createUser);
 router.get('/search', userController.searchUsers);
 router.get('/id/:userId', userController.getUserById);
 router.get('/:email', userController.getUserByEmail);
-router.put('/:email/country-lists', userController.updateUserCountryLists);
-router.post('/:userIdToFollow/follow', userController.toggleFollow);
+router.put('/:userId/country-lists', userController.updateUserCountryLists);
+router.post('/:userId/follow', userController.toggleFollow);
 // עדכון ביוגרפיה ותמונה
 router.put('/:id/bio', userController.updateBio);
 router.post('/:id/upload-image', upload.single('profileImage'), userController.uploadProfileImage);
