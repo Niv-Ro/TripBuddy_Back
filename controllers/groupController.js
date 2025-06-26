@@ -89,41 +89,106 @@ exports.getGroupDetails = async (req, res) => {
 // ✅ FIX: פונקציית חיפוש מתוקנת שעובדת עם כל הפילטרים
 exports.searchGroups = async (req, res) => {
     try {
-        const { q, adminName, country } = req.query;
-        let query = { isPrivate: false }; // חפש רק בקבוצות ציבוריות
+        const { q, adminName, country, countryCode2, countryCodeNumeric, countryName } = req.query;
 
-        // אם יש חיפוש כללי (q), חפש בשם ובתיאור
-        if (q) {
-            query.$or = [
-                { name: { $regex: q, $options: 'i' } },
-                { description: { $regex: q, $options: 'i' } }
-            ];
+        // Build base query for public groups only
+        let baseQuery = { isPrivate: false };
+
+        // Handle country search with multiple formats
+        const countryConditions = [];
+        if (country) countryConditions.push({ countries: country });
+        if (countryCode2) countryConditions.push({ countries: countryCode2 });
+        if (countryCodeNumeric) countryConditions.push({ countries: countryCodeNumeric });
+        if (countryName) {
+            // If searching by country name directly, try regex search
+            countryConditions.push({ countries: { $regex: countryName, $options: 'i' } });
         }
 
-        // אם יש חיפוש לפי מדינה
-        if (country) {
-            // חפש גם בקוד המדינה וגם בשם המדינה
-            query.countries = { $regex: country, $options: 'i' };
-        }
+        // Check if we have multiple search parameters (for "search all")
+        const hasMultipleParams = [q, adminName, ...countryConditions].filter(Boolean).length > 1;
 
-        // אם יש חיפוש לפי שם מנהל
-        if (adminName) {
-            const adminUsers = await User.find({
-                fullName: { $regex: adminName, $options: 'i' }
-            }).select('_id');
+        if (hasMultipleParams) {
+            // For "search all" functionality
+            const orConditions = [];
 
-            const adminIds = adminUsers.map(user => user._id);
-            if (adminIds.length === 0) {
-                return res.json([]);
+            if (q) {
+                orConditions.push(
+                    { name: { $regex: q, $options: 'i' } },
+                    { description: { $regex: q, $options: 'i' } }
+                );
             }
-            query.admin = { $in: adminIds };
+
+            // Add all country conditions
+            orConditions.push(...countryConditions);
+
+            if (orConditions.length > 0) {
+                baseQuery.$or = orConditions;
+            }
+        } else {
+            // Single parameter search
+            if (q) {
+                baseQuery.name = { $regex: q, $options: 'i' };
+            }
+
+            // For country search, try all formats with OR
+            if (countryConditions.length > 0) {
+                if (countryConditions.length === 1) {
+                    Object.assign(baseQuery, countryConditions[0]);
+                } else {
+                    baseQuery.$or = countryConditions;
+                }
+            }
         }
 
-        const groups = await Group.find(query)
-            .populate('admin', 'fullName')
-            .select('name description members countries admin imageUrl isPrivate')
-            .limit(50) // הגבלה על מספר התוצאות
-            .sort({ createdAt: -1 }); // מיון לפי תאריך יצירה
+        // Build aggregation pipeline
+        let pipeline = [
+            { $match: baseQuery },
+            {
+                $lookup: {
+                    from: 'users',
+                    localField: 'admin',
+                    foreignField: '_id',
+                    as: 'admin'
+                }
+            },
+            { $unwind: '$admin' }
+        ];
+
+        // Add admin name filter if provided
+        if (adminName) {
+            pipeline.push({
+                $match: {
+                    'admin.fullName': { $regex: adminName, $options: 'i' }
+                }
+            });
+        }
+
+        // Add final projection
+        pipeline.push({
+            $project: {
+                name: 1,
+                description: 1,
+                countries: 1,
+                members: 1,
+                imageUrl: 1,
+                isPrivate: 1,
+                admin: { _id: 1, fullName: 1 },
+                createdAt: 1
+            }
+        });
+
+        // Sort by creation date (newest first) and limit results
+        pipeline.push(
+            { $sort: { createdAt: -1 } },
+            { $limit: 50 }
+        );
+
+        const groups = await Group.aggregate(pipeline);
+
+        // Debug logging - remove after testing
+        console.log('Search params:', { q, adminName, country, countryCode2, countryCodeNumeric, countryName });
+        console.log('Base query:', JSON.stringify(baseQuery, null, 2));
+        console.log('Found groups:', groups.length);
 
         res.json(groups);
     } catch (err) {
