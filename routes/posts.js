@@ -17,4 +17,7 @@ router.delete('/:postId/comments/:commentId', postController.deleteComment);
 // ✅ הוספת נתיב חדש לעריכת תגובה
 router.put('/:postId/comments/:commentId', postController.updateComment);
 
+router.get('/user/:userId/all', postController.getAllPostsByUser);
+router.get('/all', postController.getAllPostsForStats);
+
 module.exports = router;

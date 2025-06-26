@@ -361,3 +361,31 @@ exports.deleteComment = async (req, res) => {
         res.status(500).json({ message: 'Server error' });
     }
 };
+
+
+exports.getAllPostsByUser = async (req, res) => {
+    try {
+        const postsQuery = Post.find({
+            author: req.params.userId
+            // ללא סינון לפי group - מחזיר את כל הפוסטים של המשתמש
+        }).sort({ createdAt: -1 });
+
+        const posts = await populatePost(postsQuery);
+        res.json(posts);
+    } catch (error) {
+        console.error("SERVER ERROR in getAllPostsByUser:", error);
+        res.status(500).json({ message: 'Server error' });
+    }
+};
+
+// --- קבלת כל הפוסטים לניתוח תגובות ---
+exports.getAllPostsForStats = async (req, res) => {
+    try {
+        const postsQuery = Post.find().sort({ createdAt: -1 });
+        const posts = await populatePost(postsQuery);
+        res.json(posts);
+    } catch (error) {
+        console.error("SERVER ERROR in getAllPostsForStats:", error);
+        res.status(500).json({ message: 'Server error' });
+    }
+};
