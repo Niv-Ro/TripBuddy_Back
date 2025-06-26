@@ -92,7 +92,7 @@ exports.searchGroups = async (req, res) => {
         const { q, adminName, country, countryCode2, countryCodeNumeric, countryName } = req.query;
 
         // Build base query for public groups only
-        let baseQuery = { isPrivate: false };
+        let baseQuery = { };
 
         // Handle country search with multiple formats
         const countryConditions = [];
