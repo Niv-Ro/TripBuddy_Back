@@ -37,13 +37,15 @@ exports.createPost = async (req, res) => {
     }
 };
 
-// --- קבלת פוסטים לפיד הראשי (לוגיקה מתוקנת) ---
 exports.getFeedPosts = async (req, res) => {
     try {
         const { userId } = req.params;
         const page = parseInt(req.query.page) || 1;
         const limit = parseInt(req.query.limit) || 10;
         const skip = (page - 1) * limit;
+
+        // קבל את פרמטר הסינון מהבקשה
+        const { countryCode } = req.query;
 
         const user = await User.findById(userId);
         if (!user) {
@@ -52,23 +54,39 @@ exports.getFeedPosts = async (req, res) => {
 
         const userGroups = await Group.find({ 'members.user': userId, 'members.status': 'approved' });
         const groupIds = userGroups.map(group => group._id);
-
-        // ✅ התיקון הקריטי: הוספת הגנה למקרה ש-user.following לא קיים
         const authorsForFeed = [user._id, ...(user.following || [])];
-        const wishlistCountries = user.wishlistCountries || [];
 
-        const query = {
+        // ✅ התיקון: בניית שאילתת הבסיס של הפיד
+        const feedQuery = {
             $or: [
-                { group: { $in: groupIds } },
+                { group: { $in: groupIds } }, // פוסטים מהקבוצות שלי
                 {
-                    group: null,
+                    group: null, // או פוסטים ציבוריים
                     $or: [
-                        { author: { $in: authorsForFeed } },
-                        { taggedCountries: { $in: wishlistCountries } }
+                        { author: { $in: authorsForFeed } }, // מאנשים שאני עוקב אחריהם
+                        // התנאי של wishlist הוסר מכאן כדי לא ליצור כפילות עם הסינון החדש
                     ]
                 }
             ]
         };
+
+        // ✅ התיקון: השאילתה הסופית מתחילה עם שאילתת הבסיס
+        const query = { ...feedQuery };
+
+        // אם המשתמש בחר מדינה ספציפית, הוסף את הסינון כ-AND לשאילתה
+        if (countryCode && countryCode !== 'all') {
+            query.taggedCountries = countryCode;
+        } else {
+            // אם המשתמש לא בחר מדינה, הוסף את מדינות ה-wishlist שלו לשאילתת הבסיס
+            const wishlistCountries = user.wishlistCountries || [];
+            if(wishlistCountries.length > 0) {
+                // הוספת פוסטים מה-wishlist לתוך ה-$or הראשי
+                query.$or.push({
+                    group: null,
+                    taggedCountries: { $in: wishlistCountries }
+                });
+            }
+        }
 
         const postsQuery = Post.find(query)
             .sort({ createdAt: -1 })
