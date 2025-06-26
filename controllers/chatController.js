@@ -118,3 +118,34 @@ exports.deleteChat = async (req, res) => {
         });
     }
 };
+
+exports.createGroupChat = async (req, res) => {
+    const { name, members, adminId } = req.body;
+    if (!name || !members || !adminId) {
+        return res.status(400).json({ message: "Please provide group name, members, and admin ID." });
+    }
+    if (members.length < 2) {
+        return res.status(400).json({ message: "A group chat requires at least 2 other members." });
+    }
+
+    // הוסף את המנהל לרשימת החברים
+    const allMembers = [
+        { user: adminId, role: 'admin' },
+        ...members.map(memberId => ({ user: memberId, role: 'member' }))
+    ];
+
+    try {
+        const groupChat = new Chat({
+            name: name,
+            isGroupChat: true,
+            members: allMembers,
+            admin: adminId,
+        });
+        const savedChat = await groupChat.save();
+        const populatedChat = await Chat.findById(savedChat._id).populate('members.user', 'fullName profileImageUrl').populate('admin', 'fullName');
+        res.status(201).json(populatedChat);
+    } catch (error) {
+        console.error("Error creating group chat:", error);
+        res.status(500).send("Server Error");
+    }
+};
