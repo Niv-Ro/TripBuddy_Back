@@ -1,5 +1,9 @@
 const User = require('../models/User');
 const mongoose = require('mongoose');
+const { auth } = require('../config/firebaseAdmin');
+const Post = require('../models/Post');
+const Comment = require('../models/Comment');
+const Group = require('../models/Group');
 
 // === Create a new user in MongoDB ===
 exports.createUser = async (req, res) => {
@@ -188,3 +192,86 @@ exports.uploadProfileImage = async (req, res) => {
         res.status(500).json({ message: 'Image upload failed', error: err.message });
     }
 };
+
+exports.deleteUserAccount = async (req, res) => {
+    const { userId } = req.params;
+    const { firebaseUid } = req.body; // קבל את ה-UID מ-Firebase לאימות
+
+    if (!userId || !firebaseUid) {
+        return res.status(400).json({ message: "User ID and Firebase UID are required." });
+    }
+
+    const session = await mongoose.startSession();
+    session.startTransaction();
+    try {
+        // --- 1. מצא את המשתמש וודא שהוא קיים ---
+        const userToDelete = await User.findById(userId).session(session);
+        if (!userToDelete || userToDelete.firebaseUid !== firebaseUid) {
+            await session.abortTransaction();
+            session.endSession();
+            return res.status(403).json({ message: "Authorization failed." });
+        }
+
+        // --- 2. מחיקת המשתמש מ-Firebase Authentication ---
+        await auth.deleteUser(firebaseUid);
+
+        // --- 3. מחיקת תמונת הפרופיל מ-Firebase Storage ---
+        await deleteFirebaseFileByUrl(userToDelete.profileImageUrl);
+
+        // --- 4. מחיקת כל הפוסטים של המשתמש והקבצים שלהם ---
+        const userPosts = await Post.find({ author: userId }).session(session);
+        for (const post of userPosts) {
+            for (const media of post.media) {
+                await deleteFirebaseFileByUrl(media.url);
+            }
+        }
+        await Comment.deleteMany({ post: { $in: userPosts.map(p => p._id) } }).session(session);
+        await Post.deleteMany({ author: userId }).session(session);
+
+        // --- 5. טיפול בקשרים חברתיים (עוקבים, נעקבים, לייקים) ---
+        await User.updateMany({}, { $pull: { followers: userId, following: userId, likes: userId } }).session(session);
+
+        // --- 6. הסרת המשתמש מקבוצות ---
+        const groupsAsMember = await Group.find({ 'members.user': userId }).session(session);
+        for (const group of groupsAsMember) {
+            if (group.admin.equals(userId)) {
+                // אם המשתמש הוא מנהל, העבר ניהול או מחק את הקבוצה
+                const otherMembers = group.members.filter(m => !m.user.equals(userId) && m.status === 'approved');
+                if (otherMembers.length > 0) {
+                    group.admin = otherMembers[0].user;
+                    group.members = otherMembers;
+                    await group.save({ session });
+                } else {
+                    await Group.findByIdAndDelete(group._id).session(session);
+                }
+            } else {
+                group.members = group.members.filter(m => !m.user.equals(userId));
+                await group.save({ session });
+            }
+        }
+
+        // --- 7. מחיקת מסמך המשתמש עצמו מה-DB ---
+        await User.findByIdAndDelete(userId).session(session);
+
+        await session.commitTransaction();
+        session.endSession();
+
+        res.json({ message: "User account and all associated data have been permanently deleted." });
+
+    } catch (error) {
+        await session.abortTransaction();
+        session.endSession();
+        console.error("Error deleting user account:", error);
+        res.status(500).json({ message: "Failed to delete user account." });
+    }
+};
+async function deleteFirebaseFileByUrl(fileUrl) {
+    if (!fileUrl || !fileUrl.includes('firebasestorage.googleapis.com')) return;
+    try {
+        const bucket = storage.bucket();
+        const path = decodeURIComponent(fileUrl.split('/o/')[1].split('?')[0]);
+        await bucket.file(path).delete();
+    } catch (error) {
+        console.error(`Could not delete file from storage: ${fileUrl}. Reason:`, error.message);
+    }
+}

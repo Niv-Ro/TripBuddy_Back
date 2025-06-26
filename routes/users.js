@@ -12,6 +12,7 @@ router.get('/id/:userId', userController.getUserById);
 router.get('/:email', userController.getUserByEmail);
 router.put('/:userId/country-lists', userController.updateUserCountryLists);
 router.post('/:userId/follow', userController.toggleFollow);
+router.delete('/:userId', userController.deleteUserAccount);
 // עדכון ביוגרפיה ותמונה
 router.put('/:id/bio', userController.updateBio);
 router.post('/:id/upload-image', upload.single('profileImage'), userController.uploadProfileImage);

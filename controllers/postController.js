@@ -41,9 +41,9 @@ exports.createPost = async (req, res) => {
 exports.getFeedPosts = async (req, res) => {
     try {
         const { userId } = req.params;
-        const page = parseInt(req.query.page) || 1; // קבל את מספר העמוד מהבקשה, ברירת מחדל 1
-        const limit = parseInt(req.query.limit) || 10; // קבל את כמות הפריטים, ברירת מחדל 10
-        const skip = (page - 1) * limit; // חשב על כמה פוסטים לדלג
+        const page = parseInt(req.query.page) || 1;
+        const limit = parseInt(req.query.limit) || 10;
+        const skip = (page - 1) * limit;
 
         const user = await User.findById(userId);
         if (!user) {
@@ -52,7 +52,9 @@ exports.getFeedPosts = async (req, res) => {
 
         const userGroups = await Group.find({ 'members.user': userId, 'members.status': 'approved' });
         const groupIds = userGroups.map(group => group._id);
-        const authorsForFeed = [user._id, ...user.following];
+
+        // ✅ התיקון הקריטי: הוספת הגנה למקרה ש-user.following לא קיים
+        const authorsForFeed = [user._id, ...(user.following || [])];
         const wishlistCountries = user.wishlistCountries || [];
 
         const query = {
@@ -70,16 +72,15 @@ exports.getFeedPosts = async (req, res) => {
 
         const postsQuery = Post.find(query)
             .sort({ createdAt: -1 })
-            .skip(skip)   // ✅ דלג על הפוסטים מהעמודים הקודמים
-            .limit(limit); // ✅ הגבל את מספר הפוסטים למנה
+            .skip(skip)
+            .limit(limit);
 
         const posts = await populatePost(postsQuery);
 
-        // בדוק אם יש עוד פוסטים לטעון בעתיד
         const totalPosts = await Post.countDocuments(query);
         const hasMore = (page * limit) < totalPosts;
 
-        res.json({ posts, hasMore }); // החזר גם את הפוסטים וגם את הדגל hasMore
+        res.json({ posts, hasMore });
 
     } catch (err) {
         console.error("Error fetching feed posts:", err);
