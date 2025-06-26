@@ -37,4 +37,6 @@ router.post('/:postId/comments', postController.addComment);
 // DELETE /api/posts/:postId/comments/:commentId -> מחק תגובה בודדת
 router.delete('/:postId/comments/:commentId', postController.deleteComment);
 
+router.put('/:postId/comments/:commentId', postController.updateComment);
+
 module.exports = router;
