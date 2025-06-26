@@ -149,3 +149,59 @@ exports.createGroupChat = async (req, res) => {
         res.status(500).send("Server Error");
     }
 };
+exports.addMember = async (req, res) => {
+    const { chatId } = req.params;
+    const { adminId, userIdToAdd } = req.body;
+    try {
+        const chat = await Chat.findById(chatId);
+        if (!chat) return res.status(404).json({ message: 'Chat not found.' });
+        if (!chat.isGroupChat || !chat.admin.equals(adminId)) {
+            return res.status(403).json({ message: 'Only the admin can add members.' });
+        }
+        if (chat.members.some(m => m.user.equals(userIdToAdd))) {
+            return res.status(400).json({ message: 'User is already in the chat.' });
+        }
+        const updatedChat = await Chat.findByIdAndUpdate(
+            chatId,
+            { $push: { members: { user: userIdToAdd, role: 'member' } } },
+            { new: true }
+        )
+            // ✅ התיקון: הוספת populate לשדה המנהל
+            .populate('members.user', 'fullName profileImageUrl')
+            .populate('admin', 'fullName');
+
+        res.json(updatedChat);
+    } catch (error) {
+        console.error("Error adding member:", error);
+        res.status(500).send("Server Error");
+    }
+};
+
+// הסרת חבר מצ'אט קבוצתי
+exports.removeMember = async (req, res) => {
+    const { chatId } = req.params;
+    const { adminId, userIdToRemove } = req.body;
+    try {
+        const chat = await Chat.findById(chatId);
+        if (!chat) return res.status(404).json({ message: 'Chat not found.' });
+        if (!chat.isGroupChat || !chat.admin.equals(adminId)) {
+            return res.status(403).json({ message: 'Only the admin can remove members.' });
+        }
+        if (chat.admin.equals(userIdToRemove)) {
+            return res.status(400).json({ message: 'Admin cannot remove themselves.' });
+        }
+        const updatedChat = await Chat.findByIdAndUpdate(
+            chatId,
+            { $pull: { members: { user: userIdToRemove } } },
+            { new: true }
+        )
+            // ✅ התיקון: הוספת populate לשדה המנהל
+            .populate('members.user', 'fullName profileImageUrl')
+            .populate('admin', 'fullName');
+
+        res.json(updatedChat);
+    } catch (error) {
+        console.error("Error removing member:", error);
+        res.status(500).send("Server Error");
+    }
+};
