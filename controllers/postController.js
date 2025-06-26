@@ -316,30 +316,6 @@ exports.deleteComment = async (req, res) => {
         res.status(500).json({ message: 'Server error', error: error.message });
     }
 };
-exports.updateComment = async (req, res) => {
-    try {
-        const { commentId } = req.params;
-        const { text, userId } = req.body; // userId של המשתמש שמנסה לערוך
-
-        const comment = await Comment.findById(commentId);
-        if (!comment) {
-            return res.status(404).json({ message: 'Comment not found.' });
-        }
-
-        if (comment.author.toString() !== userId) {
-            return res.status(403).json({ message: 'User not authorized to edit this comment.' });
-        }
-
-        comment.text = text;
-        await comment.save();
-
-        const populatedComment = await Comment.findById(commentId).populate('author', 'fullName profileImageUrl');
-        res.json(populatedComment);
-    } catch (error) {
-        console.error("Error updating comment:", error);
-        res.status(500).json({ message: 'Server error' });
-    }
-};
 
 exports.deleteComment = async (req, res) => {
     try {
