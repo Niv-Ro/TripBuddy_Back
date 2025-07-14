@@ -227,7 +227,7 @@ exports.respondToJoinRequest = async (req, res) => {
     if (!group.admin.equals(adminId)) return res.status(403).json({ message: 'Only the admin can respond to requests.' });
     const memberIndex = group.members.findIndex(m => m.user.equals(requesterId) && m.status === 'pending_approval');
     if (memberIndex === -1) return res.status(404).json({ message: 'Request not found.' });
-    if (response === 'approve') {
+    if (response === 'approved') {
         group.members[memberIndex].status = 'approved';
         await Chat.updateOne({ linkedGroup: group._id }, { $addToSet: { members: { user: requesterId, role: 'member' } } });
     } else { group.members.splice(memberIndex, 1); }
