@@ -2,16 +2,13 @@ const express = require('express');
 const router = express.Router();
 const messageController = require('../controllers/messageController');
 
-// GET /api/messages/:chatId -> קבל את כל ההודעות של צ'אט
+// Get all chats' messages by chatId
 router.get('/:chatId', messageController.getChatMessages);
-
-// POST /api/messages -> שלח הודעה חדשה
+// Send a new message
 router.post('/', messageController.sendMessage);
-
-// PUT /api/messages/:messageId -> עדכן הודעה
+// Update a message text
 router.put('/:messageId', messageController.updateMessage);
-
-// DELETE /api/messages/:messageId -> מחק הודעה
+// Delete message within time limits
 router.delete('/:messageId', messageController.deleteMessage);
 
 module.exports = router;

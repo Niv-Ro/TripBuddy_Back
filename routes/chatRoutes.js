@@ -2,34 +2,25 @@ const express = require('express');
 const router = express.Router();
 const chatController = require('../controllers/chatController');
 
-// קבלת כל הצ'אטים של משתמש
+//Get all user chats
 router.get('/my-chats/:userId', chatController.getMyChats);
-
-// חיפוש צ'אטים זמינים
+//Get all filtered chats by query
 router.get('/search', chatController.searchChats);
-
-// יצירה או גישה לצ'אט פרטי
+//Create a new chat or access an existing one if already exists
 router.post('/', chatController.createOrAccessChat);
-
-// יצירת צ'אט קבוצתי
+//Create new group chat
 router.post('/group', chatController.createGroupChat);
-
-// מחיקת צ'אט
+// Delete chat with all it's messages and data
 router.delete('/:chatId', chatController.deleteChat);
-
-// הוספת חבר לקבוצה
+// Add a new member to group chat (not a group-linked chat)
 router.put('/:chatId/add-member', chatController.addMember);
-
-// הסרת חבר מקבוצה
+// Remove a member from group chat (not a group-linked chat)
 router.put('/:chatId/remove-member', chatController.removeMember);
-
-// עזיבת צ'אט קבוצתי
+// Leave group chat (not a group-linked chat)
 router.put('/:chatId/leave', chatController.leaveChat);
-
-// שליחת בקשה להצטרפות לצ'אט
+// Send a request to join a public chat
 router.post('/:chatId/join-request', chatController.sendJoinRequest);
-
-// מענה לבקשת הצטרפות
+// Respond to join request by chat admin
 router.put('/:chatId/join-request-response', chatController.respondToJoinRequest);
 
 module.exports = router;

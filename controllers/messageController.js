@@ -2,10 +2,11 @@ const Message = require('../models/Message');
 const Chat = require('../models/Chat');
 const User = require('../models/User');
 
-// --- פונקציה לשליחת הודעה חדשה ---
+// Function to send a new message
 exports.sendMessage = async (req, res) => {
     const { chatId, content, senderId } = req.body;
 
+    // Validates that all required fields are present
     if (!chatId || !content || !senderId) {
         return res.status(400).send("Chat ID, content, and sender ID are required.");
     }
@@ -16,14 +17,17 @@ exports.sendMessage = async (req, res) => {
             content: content,
             chat: chatId,
         };
-
+        // Creates a new Message document in the database
         let message = await Message.create(newMessageData);
 
+        // Updates the parent Chat document to set this new message as the 'latestMessage'
         await Chat.findByIdAndUpdate(chatId, { latestMessage: message._id });
 
-        // שליפת ההודעה המלאה עם כל הפרטים כדי לשלוח אותה בחזרה
+        // Fetches the full message object with populated details before sending it back.
+        // This is crucial for real-time updates on the client side.
         message = await message.populate('sender', 'fullName profileImageUrl');
         message = await message.populate('chat');
+        // A nested populate to get the details of all members in the chat.
         message = await User.populate(message, {
             path: 'chat.members.user',
             select: 'fullName profileImageUrl email'
@@ -36,28 +40,32 @@ exports.sendMessage = async (req, res) => {
     }
 };
 
-// --- פונקציה לקבלת כל ההודעות של צ'אט ---
+// Function to get all messages for a specific chat
 exports.getChatMessages = async (req, res) => {
     try {
+        // Finds all messages where the 'chat' field matches the provided chatId
         const messages = await Message.find({ chat: req.params.chatId })
             .populate('sender', 'fullName profileImageUrl')
-            .populate('chat');
+            .populate('chat'); // Populates the parent chat details
 
+        //Sends messages back to the client
         res.json(messages);
     } catch (error) {
         console.error("Error in getChatMessages: ", error);
         res.status(500).send("Server Error");
     }
 };
+// Function to update an existing message
 exports.updateMessage = async (req, res) => {
     const { messageId } = req.params;
     const { content, userId } = req.body;
     try {
-        const message = await Message.findById(messageId);
+        const message = await Message.findById(messageId); //Find message in DB
         if (!message) return res.status(404).json({ message: "Message not found." });
         if (message.sender.toString() !== userId) return res.status(403).json({ message: "Not authorized." });
 
-        const timeDiff = (new Date() - new Date(message.createdAt)) / 60000; // הפרש בדקות
+        // Business Rule: Users can only edit messages for up to 5 minutes
+        const timeDiff = (new Date() - new Date(message.createdAt)) / 60000; // Difference in minutes
         if (timeDiff > 5) return res.status(403).json({ message: "You can no longer edit this message." });
 
         message.content = content;
@@ -70,7 +78,7 @@ exports.updateMessage = async (req, res) => {
     }
 };
 
-// ✅ פונקציה חדשה: מחיקת הודעה
+// Function to delete a message
 exports.deleteMessage = async (req, res) => {
     const { messageId } = req.params;
     const { userId } = req.body;
@@ -79,18 +87,20 @@ exports.deleteMessage = async (req, res) => {
         if (!message) return res.status(404).json({ message: "Message not found." });
         if (message.sender.toString() !== userId) return res.status(403).json({ message: "Not authorized." });
 
-        const timeDiff = (new Date() - new Date(message.createdAt)) / 60000; // הפרש בדקות
+        //Like update, can only delete within 5 minutes from sent time
+        const timeDiff = (new Date() - new Date(message.createdAt)) / 60000; //Difference in minutes
         if (timeDiff > 5) return res.status(403).json({ message: "You can no longer delete this message." });
 
-        // מצא את הצ'אט כדי לבדוק אם זו ההודעה האחרונה
+        // If the deleted message was the latest one in the chat, we need to update the chat's latestMessage
         const chat = await Chat.findById(message.chat);
         if (chat && chat.latestMessage && chat.latestMessage.equals(message._id)) {
-            // אם כן, מצא את ההודעה הלפני אחרונה והפוך אותה לחדשה ביותר
+            // Find the second-to-last message to set it as the new latest
             const previousMessages = await Message.find({ chat: chat._id }).sort({ createdAt: -1 }).limit(2);
-            chat.latestMessage = previousMessages.length > 1 ? previousMessages[1]._id : null;
+            chat.latestMessage = previousMessages.length > 1 ? previousMessages[1]._id : null; // If it's the only message then sets null
             await chat.save();
         }
 
+        //Finally, deletes message
         await Message.findByIdAndDelete(messageId);
         res.json({ message: "Message deleted successfully." });
     } catch (error) {

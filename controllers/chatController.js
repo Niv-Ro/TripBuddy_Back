@@ -2,22 +2,23 @@ const Chat = require('../models/Chat');
 const User = require('../models/User');
 const Message = require('../models/Message');
 
-// --- פונקציה לקבלת כל הצ'אטים של המשתמש ---
+// Fetches all chats for a specific user.
 exports.getMyChats = async (req, res) => {
     try {
         const { userId } = req.params;
 
-        // 🔥 שאילתה משופרת שמציגה צ'אטים קבוצתיים תמיד, וצ'אטים פרטיים רק אם אינם ריקים
+        // An improved query that always shows group chats, but only shows private chats if they are not empty
         const chats = await Chat.find({
-            'members.user': userId,
+            'members.user': userId, // Find all chats where the user is a member.
             $or: [
-                { isGroupChat: true }, // תנאי 1: הצג תמיד אם זה צ'אט קבוצתי
-                { latestMessage: { $exists: true, $ne: null } } // תנאי 2: או אם יש לו הודעות
+                { isGroupChat: true }, // Condition 1: Always include if it's a group chat
+                { latestMessage: { $exists: true, $ne: null } } // Condition 2: Or, if it's a private chat, only include if it has at least one message
             ]
         })
-            .populate('members.user', 'fullName profileImageUrl')
-            .populate('admin', 'fullName')
-            .populate('joinRequests.user', 'fullName profileImageUrl')
+            .populate('members.user', 'fullName profileImageUrl') // Populates user details for all members
+            .populate('admin', 'fullName') // Populates the admin's full name
+            .populate('joinRequests.user', 'fullName profileImageUrl') // Populates user details for members in join requests
+            // Population to get details of the sender of the last message
             .populate({
                 path: 'latestMessage',
                 populate: {
@@ -36,9 +37,8 @@ exports.getMyChats = async (req, res) => {
     }
 };
 
-// --- פונקציה ליצירה או קבלת צ'אט ---
+// Creates a new 1-on-1 chat or finds an existing one between two users
 exports.createOrAccessChat = async (req, res) => {
-    // 🔥 שינוי: מקבלים את שני המזהים מגוף הבקשה
     const { currentUserId, targetUserId } = req.body;
 
     if (!currentUserId || !targetUserId) {
@@ -46,15 +46,18 @@ exports.createOrAccessChat = async (req, res) => {
     }
 
     try {
+        // Find a non-group chat where the members array contains BOTH user IDs
         let chat = await Chat.findOne({
             isGroupChat: false,
             'members.user': { $all: [currentUserId, targetUserId] }
         }).populate('members.user', 'fullName profileImageUrl');
 
+        // If a chat already exists, return it
         if (chat) {
             return res.status(200).json(chat);
         }
 
+        // If no chat exists, create a new one
         const newChat = new Chat({
             isGroupChat: false,
             members: [{ user: currentUserId }, { user: targetUserId }]
@@ -70,7 +73,7 @@ exports.createOrAccessChat = async (req, res) => {
     }
 };
 
-// --- Delete Chat Function ---
+// Deletes a chat and all its associated messages
 exports.deleteChat = async (req, res) => {
     const { chatId } = req.params;
     const { userId } = req.body;
@@ -93,22 +96,17 @@ exports.deleteChat = async (req, res) => {
             return res.status(403).json({ message: 'Only the group admin can delete this chat.' });
         }
 
-        console.log(`Starting deletion process for chat: ${chat.name || 'Private Chat'} (ID: ${chatId})`);
 
-        // 1. Delete all messages belonging to this chat
+        // Deletes all messages belonging to this chat before deleting the chat itself
         const deletedMessages = await Message.deleteMany({ chat: chatId });
         console.log(`Deleted ${deletedMessages.deletedCount} messages`);
 
-        // 2. Delete the chat itself
+        // Delete the chat itself
         await Chat.findByIdAndDelete(chatId);
         console.log(`Deleted chat: ${chat.name || 'Private Chat'}`);
 
         res.json({
-            message: 'Chat and all messages deleted successfully',
-            deletedItems: {
-                chat: 1,
-                messages: deletedMessages.deletedCount
-            }
+            message: 'Chat and all messages deleted successfully'
         });
 
     } catch (err) {
@@ -120,6 +118,7 @@ exports.deleteChat = async (req, res) => {
     }
 };
 
+// Creates a new standalone group chat
 exports.createGroupChat = async (req, res) => {
     const { name, members, adminId } = req.body;
     if (!name || !members || !adminId) {
@@ -129,7 +128,7 @@ exports.createGroupChat = async (req, res) => {
         return res.status(400).json({ message: "A group chat requires at least 2 other members." });
     }
 
-    // הוסף את המנהל לרשימת החברים
+    // Creates the full member list, including the admin
     const allMembers = [
         { user: adminId, role: 'admin' },
         ...members.map(memberId => ({ user: memberId, role: 'member' }))
@@ -155,6 +154,7 @@ exports.createGroupChat = async (req, res) => {
     }
 };
 
+// Adds a new member to a group chat
 exports.addMember = async (req, res) => {
     const { chatId } = req.params;
     const { adminId, userIdToAdd } = req.body;
@@ -170,9 +170,10 @@ exports.addMember = async (req, res) => {
 
         const updatedChat = await Chat.findByIdAndUpdate(
             chatId,
-            { $push: { members: { user: userIdToAdd, role: 'member' } } },
-            { new: true }
+            { $push: { members: { user: userIdToAdd, role: 'member' } } }, // Uses the $push operator to add a new member object to the members array.
+            { new: true } // Returns the updated document
         )
+            // Populates details before sending back
             .populate('members.user', 'fullName profileImageUrl')
             .populate('admin', 'fullName')
             .populate('joinRequests.user', 'fullName profileImageUrl');
@@ -184,7 +185,8 @@ exports.addMember = async (req, res) => {
     }
 };
 
-// הסרת חבר מצ'אט קבוצתי
+// Removes a member from a group chat.
+//Same logic like add a member, the obly difference is that we use $pull operator on members array
 exports.removeMember = async (req, res) => {
     const { chatId } = req.params;
     const { adminId, userIdToRemove } = req.body;
@@ -214,7 +216,7 @@ exports.removeMember = async (req, res) => {
     }
 };
 
-// --- Leave Chat Function ---
+// Handles a user leaving a standalone group chat (not a group-linked chat)
 exports.leaveChat = async (req, res) => {
     const { chatId } = req.params;
     const { userId } = req.body;
@@ -235,7 +237,7 @@ exports.leaveChat = async (req, res) => {
         if (memberIndex === -1) {
             return res.status(400).json({ message: 'You are not a member of this chat.' });
         }
-
+        //Check if the leaving user is the chat's admin
         const isAdminLeaving = chat.admin.equals(userId);
 
         // Remove user from chat
@@ -265,7 +267,7 @@ exports.leaveChat = async (req, res) => {
     }
 };
 
-// --- Send Join Request Function ---
+// Handles a user sending a request to join a standalone group chat
 exports.sendJoinRequest = async (req, res) => {
     const { chatId } = req.params;
     const { userId, message } = req.body;
@@ -319,7 +321,7 @@ exports.sendJoinRequest = async (req, res) => {
     }
 };
 
-// --- Respond to Join Request Function ---
+// Handles an admin responding (approve/decline) to a join request
 exports.respondToJoinRequest = async (req, res) => {
     const { chatId } = req.params;
     const { adminId, requestUserId, approve } = req.body;
@@ -370,7 +372,7 @@ exports.respondToJoinRequest = async (req, res) => {
     }
 };
 
-// --- Search Available Chats Function ---
+// Searches for public group chats that are not linked to an official group
 exports.searchChats = async (req, res) => {
     try {
         const { userId, query } = req.query;
