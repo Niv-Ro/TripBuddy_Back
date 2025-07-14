@@ -64,7 +64,7 @@ exports.updateMessage = async (req, res) => {
         if (!message) return res.status(404).json({ message: "Message not found." });
         if (message.sender.toString() !== userId) return res.status(403).json({ message: "Not authorized." });
 
-        // Business Rule: Users can only edit messages for up to 5 minutes
+        // Users can only edit messages for up to 5 minutes
         const timeDiff = (new Date() - new Date(message.createdAt)) / 60000; // Difference in minutes
         if (timeDiff > 5) return res.status(403).json({ message: "You can no longer edit this message." });
 

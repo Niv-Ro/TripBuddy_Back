@@ -40,55 +40,40 @@ exports.createPost = async (req, res) => {
     }
 };
 
-//Main feed logic
-// Fetches a personalized, paginated feed for a specific user.
 exports.getFeedPosts = async (req, res) => {
     try {
         const { userId } = req.params;
-        //We try to avoid loading all posts at once since it can be very slow and not always necessary
-        //This is why we're trying to use a paginated feed, in which the user only gets a page of 10 posts every time
-        const page = parseInt(req.query.page) || 1;  //What page is requested, default is first page
-        const limit = parseInt(req.query.limit) || 10; //The limit of posts each page, default is 10
-        const skip = (page - 1) * limit; //Help us skip documents from the start by calculating the exact page the client requested
+        const { countryCode, page: pageQuery, limit: limitQuery } = req.query;
 
-        // Gets the optional country filter
-        const { countryCode } = req.query;
+        const page = parseInt(pageQuery) || 1;
+        const limit = parseInt(limitQuery) || 10;
+        const skip = (page - 1) * limit;
 
         const user = await User.findById(userId);
         if (!user) {
             return res.status(404).json({ message: 'User not found.' });
         }
 
-        const userGroups = await Group.find({ 'members.user': userId, 'members.status': 'approved' }); //Array of groups where user is approved
-        const groupIds = userGroups.map(group => group._id); //Saves array with only group id's
-        const authorsForFeed = [user._id, ...(user.following || [])]; //Creates a new array of user's id and the id of the people he follows
+        const userGroups = await Group.find({ 'members.user': userId, 'members.status': 'approved' });
+        const groupIds = userGroups.map(group => group._id);
+        const authorsForFeed = [user._id, ...(user.following || [])];
 
-        // This is the base query for the user's feed
-        const feedQuery = {
+        // This is the base query that gets posts from people/groups the user follows.
+        let query = {
             $or: [
-                { group: { $in: groupIds } }, // Posts from the user's groups
-                {
-                    group: null, //Public posts
-                    $or: [
-                        { author: { $in: authorsForFeed } }, // מאנשים שאני עוקב אחריהם
-
-                    ]
-                }
+                { group: { $in: groupIds } },
+                { group: null, author: { $in: authorsForFeed } }
             ]
         };
 
-        //Dynamically sets query, starting with the base query from aove
-        const query = { ...feedQuery };
-
-        // If a specific country is selected, it's added as an AND condition to the query
-        //This line ensures that if a posy with the specific country is yet to be loaded, it will also appear
+        // If a specific country is selected (and it's not 'all'), add it as a strict filter.
         if (countryCode && countryCode !== 'all') {
             query.taggedCountries = countryCode;
-        } else {
-            // Otherwise, posts from the user's wishlist countries are added to the feed
+        }
+        // If "All" is selected, expand the query to also include posts from the user's wishlist.
+        else {
             const wishlistCountries = user.wishlistCountries || [];
-            if(wishlistCountries.length > 0) {
-                //Add posts from wishlist into the main qeery with OR operator
+            if (wishlistCountries.length > 0) {
                 query.$or.push({
                     group: null,
                     taggedCountries: { $in: wishlistCountries }
@@ -96,17 +81,17 @@ exports.getFeedPosts = async (req, res) => {
             }
         }
 
+        // The query is always paginated.
         const postsQuery = Post.find(query)
-            .sort({ createdAt: -1 }) //Sort from newest to oldest
-            .skip(skip) //Skips the post that probably already sent in the past (if it's not the 1st page)
-            .limit(limit); //limit to 10 posts (or other value decided by client)
+            .sort({ createdAt: -1 })
+            .skip(skip)
+            .limit(limit);
 
         const posts = await populatePost(postsQuery);
 
-        const totalPosts = await Post.countDocuments(query); //Number of total posts after filtering by query
-        const hasMore = (page * limit) < totalPosts; //Notifies the client if the user has more posts that yet to be sent
+        const totalPosts = await Post.countDocuments(query);
+        const hasMore = (page * limit) < totalPosts;
 
-        //Sends post and hasMore boolean
         res.json({ posts, hasMore });
 
     } catch (err) {
@@ -275,17 +260,6 @@ exports.addComment = async (req, res) => {
         res.status(500).json({ message: 'Server error', error: error.message });
     }
 };
-
-// exports.getAllPosts = async (req, res) => {
-//     try {
-//         const postsQuery = Post.find().sort({ createdAt: -1 });
-//         const posts = await populatePost(postsQuery);
-//         res.json(posts);
-//     } catch (error) {
-//         console.error("SERVER ERROR in getAllPosts:", error);
-//         res.status(500).json({ message: 'Server error' });
-//     }
-// };
 
 // Updates the text of an existing comment
 exports.updateComment = async (req, res) => {

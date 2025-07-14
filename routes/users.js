@@ -1,8 +1,7 @@
 const express = require('express');
 const router = express.Router();
-const userController = require('../controllers/userController'); // ייבוא ה-Controller
-const multer = require('multer');
-const upload = multer({ dest: 'uploads/' }); // בחר storage מתאים אם אתה רוצה Firebase/Cloudinary
+const userController = require('../controllers/userController');
+
 
 
 //Creates a new user
